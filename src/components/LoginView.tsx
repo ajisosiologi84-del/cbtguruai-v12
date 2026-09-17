@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { AppConfig, StudentInfo, StudentUser, StudentResult, TeacherUser, ExamScheduleToken } from '../types';
-import { User, Key, LogIn, Settings, AlertCircle, KeyRound, Users, GraduationCap, BookOpen, UserCheck, FileUp, HelpCircle, CheckCircle2, Download, Sparkles, Building2, Trophy, Crown, Medal, Award, Flame, ChevronDown, ChevronUp } from 'lucide-react';
+import { User, Key, LogIn, Settings, AlertCircle, KeyRound, Users, GraduationCap, BookOpen, UserCheck, FileUp, HelpCircle, CheckCircle2, Download, Sparkles, Building2, Trophy, Crown, Medal, Award, Flame, ChevronDown, ChevronUp, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { CbtLogo } from './CbtLogo';
 import { decryptAppBackup } from '../utils/crypto';
 import { loadTeachersFromFirebase, loadAdminsFromFirebase } from '../lib/firebase';
+import { fetchAppsScriptDatabase } from '../utils/googleAppsScriptService';
 
 interface LoginViewProps {
   config: AppConfig;
@@ -35,6 +36,80 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
   // Guidance / Help Modal
   const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // Google Apps Script Live Verification & Sync state
+  const [isVerifyingOnline, setIsVerifyingOnline] = useState(false);
+  const [showGasSyncModal, setShowGasSyncModal] = useState(false);
+  const [gasSyncUrl, setGasSyncUrl] = useState(() => {
+    return (
+      (config.googleSheetsWebhookUrl || '').trim() ||
+      (typeof window !== 'undefined' ? (localStorage.getItem('cbt_master_gas_url') || '') : '').trim()
+    );
+  });
+  const [isSyncingGas, setIsSyncingGas] = useState(false);
+  const [gasSyncMsg, setGasSyncMsg] = useState<{ type: 'idle' | 'success' | 'error'; text: string } | null>(null);
+
+  const handleManualGasSync = async () => {
+    const cleanUrl = gasSyncUrl.trim();
+    if (!cleanUrl) {
+      setGasSyncMsg({ type: 'error', text: 'Harap masukkan URL Web App Google Apps Script!' });
+      return;
+    }
+    if (!cleanUrl.startsWith('https://script.google.com/macros/s/')) {
+      setGasSyncMsg({
+        type: 'error',
+        text: 'Format URL tidak valid! Harus berawalan: https://script.google.com/macros/s/.../exec',
+      });
+      return;
+    }
+
+    setIsSyncingGas(true);
+    setGasSyncMsg({ type: 'idle', text: 'Menghubungi Google Apps Script & membaca sheet DATA_GURU...' });
+
+    try {
+      const gasData = await fetchAppsScriptDatabase(cleanUrl, 'all');
+      const fetchedTeachers = gasData.teachers || [];
+      const fetchedStudents = gasData.students || [];
+      const fetchedAdmins = gasData.admins || [];
+
+      if (fetchedTeachers.length === 0 && fetchedStudents.length === 0) {
+        setGasSyncMsg({
+          type: 'error',
+          text: 'Terhubung ke Google Spreadsheet, namun data guru & siswa masih kosong.',
+        });
+        return;
+      }
+
+      try {
+        localStorage.setItem('cbt_master_gas_url', cleanUrl);
+      } catch (e) {}
+
+      if (onSaveConfig) {
+        onSaveConfig({
+          ...config,
+          googleSheetsWebhookUrl: cleanUrl,
+          teachers: fetchedTeachers.length > 0 ? fetchedTeachers : config.teachers,
+          students: fetchedStudents.length > 0 ? fetchedStudents : config.students,
+          admins: fetchedAdmins.length > 0 ? fetchedAdmins : config.admins,
+        });
+      }
+
+      setGasSyncMsg({
+        type: 'success',
+        text: `Berhasil menarik ${fetchedTeachers.length} Akun Guru dan ${fetchedStudents.length} Akun Siswa! Silakan tutup dialog ini dan login menggunakan NIP/Username Anda.`,
+      });
+      if (showAlert) {
+        showAlert(`Sukses! ${fetchedTeachers.length} Akun Guru berhasil disinkronkan ke browser ini.`);
+      }
+    } catch (err: any) {
+      setGasSyncMsg({
+        type: 'error',
+        text: `Gagal menarik data: ${err.message || 'Pastikan Web App Apps Script di-deploy dengan akses Anyone (Siapa saja).'}`
+      });
+    } finally {
+      setIsSyncingGas(false);
+    }
+  };
 
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -271,7 +346,71 @@ export const LoginView: React.FC<LoginViewProps> = ({
       }
     } catch (e) {}
 
-    triggerError('Otentikasi Gagal! Username atau Password yang Anda masukkan tidak sesuai.');
+    // Fallback: Check Google Spreadsheet via Google Apps Script Webhook
+    const gasWebhookUrl =
+      (config.googleSheetsWebhookUrl || '').trim() ||
+      (typeof window !== 'undefined' ? (localStorage.getItem('cbt_master_gas_url') || '') : '').trim();
+
+    if (gasWebhookUrl && gasWebhookUrl.startsWith('https://script.google.com/macros/s/')) {
+      setIsVerifyingOnline(true);
+      try {
+        const gasData = await fetchAppsScriptDatabase(gasWebhookUrl, 'all');
+        const remoteTeachers = gasData.teachers || [];
+        const remoteAdmins = gasData.admins || [];
+        const remoteStudents = gasData.students || [];
+
+        // Check if admin matches
+        const remoteAdminMatch = remoteAdmins.find(
+          (a) => a.username && a.username.trim().toLowerCase() === uLower && a.password === p
+        );
+        if (remoteAdminMatch) {
+          if (onSaveConfig) {
+            onSaveConfig({
+              ...config,
+              googleSheetsWebhookUrl: gasWebhookUrl,
+              admins: remoteAdmins.length > 0 ? remoteAdmins : config.admins,
+              teachers: remoteTeachers.length > 0 ? remoteTeachers : config.teachers,
+              students: remoteStudents.length > 0 ? remoteStudents : config.students,
+            });
+          }
+          try {
+            localStorage.setItem('cbt_master_gas_url', gasWebhookUrl);
+          } catch (e) {}
+          onAdminLoginSuccess('admin');
+          return;
+        }
+
+        // Check if teacher matches
+        const matchedGasTeacher = remoteTeachers.find(checkTeacherMatch);
+        if (matchedGasTeacher) {
+          if (onSaveConfig) {
+            onSaveConfig({
+              ...config,
+              googleSheetsWebhookUrl: gasWebhookUrl,
+              teachers: remoteTeachers.length > 0 ? remoteTeachers : config.teachers,
+              students: remoteStudents.length > 0 ? remoteStudents : config.students,
+            });
+          }
+          try {
+            localStorage.setItem('cbt_master_gas_url', gasWebhookUrl);
+          } catch (e) {}
+          onAdminLoginSuccess('teacher', matchedGasTeacher);
+          return;
+        }
+      } catch (err: any) {
+        console.warn('Gagal verifikasi login ke Google Apps Script:', err);
+      } finally {
+        setIsVerifyingOnline(false);
+      }
+    }
+
+    if (!gasWebhookUrl) {
+      triggerError(
+        'Otentikasi Gagal! Akun Guru Anda belum terdaftar di browser ini. Klik tombol "Sinkronkan Akun Guru dari Spreadsheet" di bawah untuk menarik akun Anda.'
+      );
+    } else {
+      triggerError('Otentikasi Gagal! NIP/Username atau Password tidak cocok pada data lokal maupun Google Spreadsheet.');
+    }
   };
 
   return (
@@ -411,52 +550,82 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </form>
               ) : (
                 /* Panel Kelola Ujian Form */
-                <form onSubmit={handleAdminSubmit} className="space-y-3.5">
-                  <div>
-                    <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-1" htmlFor="adminUser">
-                      Username
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                        <User className="w-4 h-4" />
+                <>
+                  <form onSubmit={handleAdminSubmit} className="space-y-3.5">
+                    <div>
+                      <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-1" htmlFor="adminUser">
+                        Username
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                          <User className="w-4 h-4" />
+                        </div>
+                        <input
+                          id="adminUser"
+                          type="text"
+                          value={adminUser}
+                          onChange={(e) => setAdminUser(e.target.value)}
+                          placeholder="Masukkan Username"
+                          className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm font-semibold"
+                        />
                       </div>
-                      <input
-                        id="adminUser"
-                        type="text"
-                        value={adminUser}
-                        onChange={(e) => setAdminUser(e.target.value)}
-                        placeholder="Masukkan Username"
-                        className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm font-semibold"
-                      />
                     </div>
-                  </div>
 
-                  <div>
-                    <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-1" htmlFor="adminPass">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                        <Key className="w-4 h-4" />
+                    <div>
+                      <label className="block text-gray-700 text-xs font-bold uppercase tracking-wider mb-1" htmlFor="adminPass">
+                        Password
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                          <Key className="w-4 h-4" />
+                        </div>
+                        <input
+                          id="adminPass"
+                          type="password"
+                          value={adminPass}
+                          onChange={(e) => setAdminPass(e.target.value)}
+                          placeholder="Masukkan Password"
+                          className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm font-semibold"
+                        />
                       </div>
-                      <input
-                        id="adminPass"
-                        type="password"
-                        value={adminPass}
-                        onChange={(e) => setAdminPass(e.target.value)}
-                        placeholder="Masukkan Password"
-                        className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-indigo-500 transition-colors text-sm font-semibold"
-                      />
                     </div>
-                  </div>
 
-                  <button
-                    type="submit"
-                    className="w-full bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-[0.98] text-sm mt-2 cursor-pointer"
-                  >
-                    <LogIn className="w-4 h-4" /> Masuk Panel Pengelola
-                  </button>
-                </form>
+                    <button
+                      type="submit"
+                      disabled={isVerifyingOnline}
+                      className="w-full bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-white font-bold py-3 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 active:scale-[0.98] text-sm mt-2 cursor-pointer disabled:opacity-75"
+                    >
+                      {isVerifyingOnline ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                          <span>Memeriksa Akun ke Spreadsheet...</span>
+                        </>
+                      ) : (
+                        <>
+                          <LogIn className="w-4 h-4" /> Masuk Panel Pengelola
+                        </>
+                      )}
+                    </button>
+                  </form>
+
+                  {/* Direct Google Sheets Sync for Teachers on Fresh Browsers */}
+                  <div className="pt-2.5 mt-2 border-t border-slate-100 flex flex-col gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGasSyncMsg(null);
+                        setShowGasSyncModal(true);
+                      }}
+                      className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl p-2.5 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition active:scale-98 shadow-2xs"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <span>Sinkronkan Akun Guru dari Spreadsheet</span>
+                    </button>
+                    <p className="text-[10px] text-center text-slate-500 font-medium leading-relaxed">
+                      Browser baru belum terdaftar akun guru? Tarik akun langsung dari Google Sheets.
+                    </p>
+                  </div>
+                </>
               )}
 
               {/* Quick Import JSON Exam Package Bar */}
@@ -755,6 +924,105 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 py-2 rounded-xl text-xs cursor-pointer"
               >
                 Mengerti & Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SINKRONISASI GOOGLE APPS SCRIPT / SPREADSHEET MODAL */}
+      {showGasSyncModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/75 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-100 text-emerald-700 rounded-2xl">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base">Sinkron Akun dari Google Spreadsheet</h3>
+                  <p className="text-[11px] text-slate-500">Tarik data Guru & Siswa ke browser ini tanpa login admin</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGasSyncModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-lg text-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-700 space-y-3 leading-relaxed">
+              <div className="bg-emerald-50/70 border border-emerald-200 p-3 rounded-2xl text-emerald-900">
+                <p className="font-bold text-xs flex items-center gap-1.5 mb-1">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  Solusi Akses Guru di Perangkat / Browser Baru
+                </p>
+                <p className="text-[11px] text-emerald-800">
+                  Jika Anda guru dan membuka CBT di browser yang belum pernah disinkronkan, masukkan URL Web App Google Apps Script sekolah di bawah ini untuk menarik akun Guru Anda langsung dari Google Spreadsheet.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 text-xs font-bold uppercase tracking-wider mb-1.5">
+                  URL Web App Google Apps Script
+                </label>
+                <input
+                  type="url"
+                  value={gasSyncUrl}
+                  onChange={(e) => setGasSyncUrl(e.target.value)}
+                  placeholder="https://script.google.com/macros/s/AKfycbx.../exec"
+                  className="w-full px-3.5 py-2.5 border-2 border-slate-200 rounded-xl focus:outline-none focus:border-emerald-500 font-mono text-xs text-slate-800"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  💡 Tips: URL ini bisa didapatkan dari Admin/Proktor CBT sekolah yang mengelola Google Spreadsheet.
+                </p>
+              </div>
+
+              {gasSyncMsg && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-medium flex items-start gap-2 ${
+                    gasSyncMsg.type === 'success'
+                      ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
+                      : gasSyncMsg.type === 'error'
+                      ? 'bg-rose-100 text-rose-900 border border-rose-300'
+                      : 'bg-blue-100 text-blue-900 border border-blue-300'
+                  }`}
+                >
+                  {gasSyncMsg.type === 'idle' && <RefreshCw className="w-4 h-4 animate-spin text-blue-600 shrink-0 mt-0.5" />}
+                  {gasSyncMsg.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />}
+                  {gasSyncMsg.type === 'error' && <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />}
+                  <span>{gasSyncMsg.text}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowGasSyncModal(false)}
+                className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-100 font-bold rounded-xl text-xs cursor-pointer"
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={handleManualGasSync}
+                disabled={isSyncingGas}
+                className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md transition cursor-pointer disabled:opacity-50"
+              >
+                {isSyncingGas ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menghubungi Spreadsheet...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Tarik Data Akun Sekarang</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

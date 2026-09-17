@@ -34,6 +34,7 @@ import {
   subscribeStudentsFromFirebase,
   subscribeAdminsFromFirebase,
 } from './lib/firebase';
+import { fetchAppsScriptDatabase } from './utils/googleAppsScriptService';
 import { ExamScheduleToken } from './types';
 
 const defaultScheduleTokens: ExamScheduleToken[] = [
@@ -100,6 +101,11 @@ const ACTIVE_SESSION_KEY = 'cbt_active_student_exam_session_v2';
 export default function App() {
   // App Configuration State
   const [config, setConfig] = useState<AppConfig>(() => {
+    const masterGasUrl = typeof window !== 'undefined' ? (localStorage.getItem('cbt_master_gas_url') || '') : '';
+    const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const queryGasUrl = urlParams?.get('gas') || urlParams?.get('webhook') || '';
+    const initialGasUrl = queryGasUrl || masterGasUrl || '';
+
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -107,6 +113,7 @@ export default function App() {
         if (parsed && Array.isArray(parsed.questions) && parsed.questions.length > 0) {
           return {
             ...parsed,
+            googleSheetsWebhookUrl: parsed.googleSheetsWebhookUrl || initialGasUrl || undefined,
             kodeGuru: parsed.kodeGuru || 'GURU01',
             examToken: parsed.examToken || 'SOS2026',
             scheduleTokens: Array.isArray(parsed.scheduleTokens) && parsed.scheduleTokens.length > 0 ? parsed.scheduleTokens : defaultScheduleTokens,
@@ -129,6 +136,7 @@ export default function App() {
       questions: defaultQuestions,
       examToken: 'SOS2026',
       kodeGuru: 'GURU01',
+      googleSheetsWebhookUrl: initialGasUrl || undefined,
       scheduleTokens: defaultScheduleTokens,
       students: defaultStudents,
       teachers: [
@@ -344,6 +352,54 @@ export default function App() {
       unsubAdmins();
       unsubResults();
     };
+  }, []);
+
+  // Google Apps Script Auto-Sync Effect for Fresh Browsers
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const queryGas = (urlParams.get('gas') || urlParams.get('webhook') || '').trim();
+    const masterGas = (localStorage.getItem('cbt_master_gas_url') || '').trim();
+    const targetGas = queryGas || config.googleSheetsWebhookUrl || masterGas;
+
+    if (queryGas) {
+      try {
+        localStorage.setItem('cbt_master_gas_url', queryGas);
+      } catch (e) {}
+    }
+
+    if (targetGas && targetGas.startsWith('https://script.google.com/macros/s/')) {
+      // If queryGas was provided, or if local teachers count is minimal (<= 2), fetch from Spreadsheet
+      const shouldSync = Boolean(queryGas) || (config.teachers && config.teachers.length <= 2);
+      if (shouldSync) {
+        fetchAppsScriptDatabase(targetGas, 'all')
+          .then((gasData) => {
+            if (gasData.teachers && gasData.teachers.length > 0) {
+              setConfig((prev) => {
+                const updated: AppConfig = {
+                  ...prev,
+                  googleSheetsWebhookUrl: targetGas,
+                  teachers: gasData.teachers && gasData.teachers.length > 0 ? gasData.teachers : prev.teachers,
+                  students: gasData.students && gasData.students.length > 0 ? gasData.students : prev.students,
+                  admins: gasData.admins && gasData.admins.length > 0 ? gasData.admins : prev.admins,
+                };
+                try {
+                  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+                } catch (e) {}
+                return updated;
+              });
+
+              if (queryGas) {
+                showAlert(`Tautan Google Spreadsheet Terdeteksi! Berhasil memuat ${gasData.teachers.length} Akun Guru ke perangkat ini.`);
+              }
+            }
+          })
+          .catch((err) => {
+            console.warn('Gagal background auto-sync dari Google Apps Script:', err);
+          });
+      }
+    }
   }, []);
 
   // View State & Admin Role

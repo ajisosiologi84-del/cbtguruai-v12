@@ -167,8 +167,22 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
       showAlert('Masukkan URL Web App Google Apps Script.');
       return;
     }
+    try {
+      localStorage.setItem('cbt_master_gas_url', cleanUrl);
+    } catch (e) {}
     onSaveWebhookUrl(cleanUrl);
     showAlert('URL Google Apps Script berhasil disimpan!');
+  };
+
+  const handleCopyShareableLink = () => {
+    const cleanUrl = webhookUrl.trim();
+    if (!cleanUrl) {
+      showAlert('Harap isi dan simpan URL Web App Google Apps Script terlebih dahulu!');
+      return;
+    }
+    const shareUrl = `${window.location.origin}${window.location.pathname}?gas=${encodeURIComponent(cleanUrl)}`;
+    navigator.clipboard.writeText(shareUrl);
+    showAlert('Tautan Auto-Sync Guru Berhasil Disalin! Bagikan tautan ini ke grup WhatsApp guru agar akun guru langsung terhubung dari Spreadsheet di browser manapun.');
   };
 
   // Generate Current Live JSON Payload based on UI selection
@@ -522,6 +536,15 @@ export const GoogleSheetsModal: React.FC<GoogleSheetsModalProps> = ({
             className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition shadow-xs active:scale-95 cursor-pointer shrink-0"
           >
             Simpan URL
+          </button>
+          <button
+            type="button"
+            onClick={handleCopyShareableLink}
+            className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/40 font-bold text-xs rounded-xl transition shadow-xs active:scale-95 cursor-pointer shrink-0 flex items-center gap-1.5"
+            title="Salin tautan login yang langsung menyinkronkan data guru saat dibuka di HP/browser baru"
+          >
+            <Copy className="w-3.5 h-3.5" />
+            <span>Bagikan Link Guru (Auto-Sync)</span>
           </button>
         </div>
 
