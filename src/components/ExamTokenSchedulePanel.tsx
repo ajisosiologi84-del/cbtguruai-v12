@@ -14,6 +14,7 @@ import {
   FileText,
   FileCode,
   FileSpreadsheet,
+  FileJson,
   Layers,
   Sparkles,
   Shield,
@@ -24,6 +25,7 @@ import {
   Search,
   Filter,
   Users,
+  User,
   BookOpen,
   ArrowRight,
   Radio,
@@ -78,6 +80,27 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
 
   const scheduleList: ExamScheduleToken[] = config.scheduleTokens || [];
 
+  // Teachers List Resolution
+  const teachersList = config.teachers && config.teachers.length > 0 ? config.teachers : [
+    { id: 't1', nip: '198501152010011002', nama: 'Drs. Aji Sosiologi, M.Pd', mapel: 'Sosiologi', kodeGuru: 'GURU01' },
+    { id: 't2', nip: '198803122012022001', nama: 'Dra. Rini Wulandari, M.Si', mapel: 'Geografi', kodeGuru: 'GURU02' },
+    { id: 't3', nip: '199005202015031003', nama: 'Budi Santoso, S.Pd', mapel: 'Ekonomi', kodeGuru: 'GURU03' },
+  ];
+
+  // Helper: Get Teacher metadata for specific package schedule
+  const getTeacherForPackage = (item: ExamScheduleToken) => {
+    const effectiveKg = (item.kodeGuru || config.kodeGuru || 'GURU01').toUpperCase();
+    const found = teachersList.find(
+      (t) => (t.kodeGuru || t.nip).toUpperCase() === effectiveKg
+    );
+    return {
+      kodeGuru: effectiveKg,
+      nama: found?.nama || config.kopSekolah?.namaGuru || 'Guru Pengampu',
+      nip: found?.nip || config.kopSekolah?.nipGuru || '-',
+      mapel: found?.mapel || item.mapel || config.mapel || 'Sosiologi',
+    };
+  };
+
   // Helper: Generate Random 6-char Alphanumeric Token
   const generateRandomTokenStr = (prefix = ''): string => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -99,7 +122,14 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   // Helper: Filter Questions for a specific package
   const getQuestionsForPackage = (item: ExamScheduleToken): Question[] => {
     const allQuestions = config.questions || [];
-    const activeQuestions = allQuestions.filter((q) => q.isActive !== false);
+    const itemKodeGuru = (item.kodeGuru || config.kodeGuru || 'GURU01').toUpperCase();
+
+    // Prioritize questions mapped to this specific teacher if multi-guru exists
+    const teacherQuestions = allQuestions.filter(
+      (q) => !q.kodeGuru || q.kodeGuru.toUpperCase() === itemKodeGuru
+    );
+    const baseQuestions = teacherQuestions.length > 0 ? teacherQuestions : allQuestions;
+    const activeQuestions = baseQuestions.filter((q) => q.isActive !== false);
 
     if (item.soalIds && item.soalIds.length > 0) {
       return activeQuestions.filter((q) => item.soalIds?.includes(q.id));
@@ -128,13 +158,15 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
       return;
     }
 
+    const teacher = getTeacherForPackage(item);
     const packageConfig: AppConfig = {
       ...config,
-      mapel: item.mapel || config.mapel || 'Sosiologi',
-      mapelTitle: `${item.mapel || 'Sosiologi'} - ${item.paketSoal} (${item.namaSesi})`,
+      mapel: item.mapel || teacher.mapel || config.mapel || 'Sosiologi',
+      mapelTitle: `${item.mapel || teacher.mapel || 'Sosiologi'} - ${item.paketSoal} (${item.namaSesi})`,
       examToken: item.token,
       duration: item.durasiMenit || config.duration || 60,
       kkm: item.kkm || config.kkm || 75,
+      kodeGuru: teacher.kodeGuru,
       questions: packageQuestions,
     };
 
@@ -200,14 +232,82 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
     });
   };
 
-  // 4. Download JSON Backup of Specific Package
-  const handleDownloadJsonPackage = (item: ExamScheduleToken) => {
+  // 4. Download File Paket Ujian (.json) - Metode Utama Pengaturan & Sinkronisasi Ujian
+  const handleDownloadJsonPackage = (item: ExamScheduleToken, customToken?: string) => {
     const packageQuestions = getQuestionsForPackage(item);
-    const exportData = {
-      paketInfo: item,
+    if (packageQuestions.length === 0) {
+      alert('Paket ini belum memiliki butir soal yang aktif!');
+      return;
+    }
+
+    const currentToken = (customToken || item.token || 'SOS2026').trim().toUpperCase();
+    const teacher = getTeacherForPackage(item);
+    const mapelName = item.mapel || teacher.mapel || config.mapel || 'Sosiologi';
+
+    const cleanKodePaket = (item.kodePaket || 'PKT').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanMapel = mapelName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanKg = teacher.kodeGuru.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanToken = currentToken.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    // Standalone ready-to-run package config
+    const packageConfig: AppConfig = {
+      ...config,
+      mapel: mapelName,
+      mapelTitle: `${mapelName} - ${item.paketSoal} (${item.namaSesi})`,
+      examToken: currentToken,
+      duration: item.durasiMenit || config.duration || 60,
+      kkm: item.kkm || config.kkm || 75,
+      kodeGuru: teacher.kodeGuru,
       questions: packageQuestions,
+      scheduleTokens: [
+        {
+          ...item,
+          token: currentToken,
+          isPrimaryActive: true,
+          status: 'ACTIVE',
+        },
+      ],
+    };
+
+    const exportData = {
+      cbtPackageType: 'CBT_EXAM_PACKAGE_JSON',
+      version: '2.2',
       exportedAt: new Date().toISOString(),
       generator: 'CBT GURUAI 2026 - National Exam Standard',
+      // Metadata identifying the teacher & latest randomized token
+      guru: {
+        kodeGuru: teacher.kodeGuru,
+        namaGuru: teacher.nama,
+        nipGuru: teacher.nip,
+        mapel: mapelName,
+      },
+      paketInfo: {
+        id: item.id,
+        namaSesi: item.namaSesi,
+        kodePaket: item.kodePaket,
+        paketSoal: item.paketSoal,
+        mapel: mapelName,
+        targetKelas: item.targetKelas,
+        durasiMenit: item.durasiMenit,
+        kkm: item.kkm,
+        token: currentToken, // latest randomized token
+        tokenCreatedAt: item.tokenCreatedAt || new Date().toISOString(),
+        kodeGuru: teacher.kodeGuru,
+        namaGuru: teacher.nama,
+        status: item.status,
+        totalSoal: packageQuestions.length,
+        keterangan: item.keterangan || '',
+      },
+      // Root compatibility keys for instant restoration in login & admin
+      examToken: currentToken,
+      mapel: mapelName,
+      mapelTitle: `${mapelName} - ${item.paketSoal} (${item.namaSesi}) [TOKEN: ${currentToken}]`,
+      duration: item.durasiMenit || config.duration || 60,
+      kkm: item.kkm || config.kkm || 75,
+      kodeGuru: teacher.kodeGuru,
+      questions: packageQuestions,
+      students: config.students || [],
+      config: packageConfig,
     };
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], {
@@ -216,9 +316,17 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Paket_Soal_${item.kodePaket}_${item.token}.json`;
+
+    // Distinguishable filename: Paket_[KodePaket]_[Mapel]_[KodeGuru]_TOKEN_[Token].json
+    a.download = `Paket_${cleanKodePaket}_${cleanMapel}_${cleanKg}_TOKEN_${cleanToken}.json`;
     a.click();
     URL.revokeObjectURL(url);
+
+    if (showAlert) {
+      showAlert(
+        `File Paket Ujian (.json) untuk "${item.paketSoal}" dengan Token "${currentToken}" buatan ${teacher.nama} (${teacher.kodeGuru}) Berhasil Diunduh!`
+      );
+    }
   };
 
   // 5. Set As Primary Login Token
@@ -244,16 +352,16 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   };
 
   // 6. Regenerate Single Token
-  const handleRegenerateSingleToken = (item: ExamScheduleToken) => {
+  const handleRegenerateSingleToken = (item: ExamScheduleToken, autoDownloadJson = false) => {
     const newToken = generateRandomTokenStr();
+    const tokenTime = new Date().toISOString();
+    const updatedItem: ExamScheduleToken = {
+      ...item,
+      token: newToken,
+      tokenCreatedAt: tokenTime,
+    };
     const updatedList = scheduleList.map((s) =>
-      s.id === item.id
-        ? {
-            ...s,
-            token: newToken,
-            tokenCreatedAt: new Date().toISOString(),
-          }
-        : s
+      s.id === item.id ? updatedItem : s
     );
 
     const isCurrentPrimary = item.isPrimaryActive || config.examToken === item.token;
@@ -264,8 +372,13 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
     };
 
     onSaveConfig(newConfig);
-    if (showAlert) {
-      showAlert(`Token untuk ${item.namaSesi} berhasil diperbarui menjadi: ${newToken}`);
+
+    if (autoDownloadJson) {
+      handleDownloadJsonPackage(updatedItem, newToken);
+    } else if (showAlert) {
+      showAlert(
+        `Token untuk "${item.namaSesi}" berhasil diacak menjadi: "${newToken}"! Anda dapat langsung mengunduh Paket .json dengan token terbaru.`
+      );
     }
   };
 
@@ -296,7 +409,7 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
 
     onSaveConfig(newConfig);
     if (showAlert) {
-      showAlert('Seluruh Token Sesi Ujian Berhasil Di-generate Ulang Secara Acak!');
+      showAlert(`Seluruh Token Sesi Ujian Berhasil Di-generate Ulang Secara Acak! Token Utama Login kini: "${firstActiveToken}".`);
     }
   };
 
@@ -359,33 +472,35 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   };
 
   // 11. Save Modal Form
-  const handleSaveModalForm = (e: React.FormEvent) => {
+  const handleSaveModalForm = (e: React.FormEvent, shouldDownloadJson = false) => {
     e.preventDefault();
 
     const cleanToken = formToken.trim().toUpperCase() || generateRandomTokenStr();
 
     if (editingToken) {
       // Update
+      const isTokenChanged = editingToken.token !== cleanToken;
+      const updatedItem: ExamScheduleToken = {
+        ...editingToken,
+        namaSesi: formNamaSesi.trim(),
+        tanggalUjian: formTanggal,
+        jamMulai: formJamMulai,
+        jamSelesai: formJamSelesai,
+        durasiMenit: Number(formDurasi) || 60,
+        kkm: Number(formKkm) || 75,
+        mapel: formMapel.trim(),
+        kodeGuru: formKodeGuru.trim(),
+        targetKelas: formTargetKelas.trim(),
+        paketSoal: formPaketSoal.trim(),
+        kodePaket: formKodePaket.trim(),
+        token: cleanToken,
+        tokenCreatedAt: isTokenChanged ? new Date().toISOString() : (editingToken.tokenCreatedAt || new Date().toISOString()),
+        status: formStatus,
+        keterangan: formKeterangan.trim(),
+      };
+
       const updatedList = scheduleList.map((s) =>
-        s.id === editingToken.id
-          ? {
-              ...s,
-              namaSesi: formNamaSesi.trim(),
-              tanggalUjian: formTanggal,
-              jamMulai: formJamMulai,
-              jamSelesai: formJamSelesai,
-              durasiMenit: Number(formDurasi) || 60,
-              kkm: Number(formKkm) || 75,
-              mapel: formMapel.trim(),
-              kodeGuru: formKodeGuru.trim(),
-              targetKelas: formTargetKelas.trim(),
-              paketSoal: formPaketSoal.trim(),
-              kodePaket: formKodePaket.trim(),
-              token: cleanToken,
-              status: formStatus,
-              keterangan: formKeterangan.trim(),
-            }
-          : s
+        s.id === editingToken.id ? updatedItem : s
       );
 
       const isPrimary = editingToken.isPrimaryActive;
@@ -396,7 +511,12 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
       };
 
       onSaveConfig(newConfig);
-      if (showAlert) showAlert(`Jadwal & Token ${formNamaSesi} Berhasil Disimpan!`);
+
+      if (shouldDownloadJson) {
+        handleDownloadJsonPackage(updatedItem, cleanToken);
+      } else if (showAlert) {
+        showAlert(`Jadwal & Token "${formNamaSesi}" (Token: ${cleanToken}) Berhasil Disimpan!`);
+      }
     } else {
       // Add New
       const newId = `SCHED-${Date.now().toString().slice(-4)}`;
@@ -430,7 +550,12 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
       };
 
       onSaveConfig(newConfig);
-      if (showAlert) showAlert(`Sesi Baru "${formNamaSesi}" dengan Token "${cleanToken}" Berhasil Ditambahkan!`);
+
+      if (shouldDownloadJson) {
+        handleDownloadJsonPackage(newItem, cleanToken);
+      } else if (showAlert) {
+        showAlert(`Sesi Baru "${formNamaSesi}" dengan Token "${cleanToken}" Berhasil Ditambahkan!`);
+      }
     }
 
     setIsModalOpen(false);
@@ -726,15 +851,15 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                 <span className="w-6 h-6 rounded-full bg-emerald-600 text-white font-black text-xs flex items-center justify-center shadow-xs">
                   4
                 </span>
-                <Download className="w-4 h-4 text-emerald-600" />
+                <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               </div>
-              <h4 className="font-bold text-xs text-slate-800">Download & Distribusi</h4>
+              <h4 className="font-bold text-xs text-slate-800">Setting Ujian Paket (.json)</h4>
               <p className="text-[11px] text-slate-500 mt-1 leading-snug">
-                Download CBT Offline (.html), cetak naskah PDF/Word, dan bagikan slip token ke siswa.
+                Gunakan file paket .json dengan token acak terbaru untuk menyetting ujian di komputer proktor & lab.
               </p>
             </div>
             <div className="mt-3 pt-2 border-t border-slate-200/60 text-[10px] font-bold text-emerald-600 flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Siap Ujian Online / Offline
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Siap Ujian dengan Token Terbaru
             </div>
           </div>
         </div>
@@ -754,6 +879,11 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
           </div>
           <p className="text-xs text-slate-400 max-w-md">
             Siswa yang login dengan token ini akan mengerjakan <b>{activePrimarySchedule?.namaSesi || 'Sesi Utama'}</b> ({activePrimarySchedule?.paketSoal || 'Paket A'}).
+            {activePrimarySchedule && (
+              <span className="block text-emerald-400 font-semibold mt-1">
+                Guru: {getTeacherForPackage(activePrimarySchedule).nama} ({getTeacherForPackage(activePrimarySchedule).kodeGuru})
+              </span>
+            )}
           </p>
         </div>
 
@@ -777,6 +907,7 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
             <button
               onClick={() => handleRegenerateSingleToken(activePrimarySchedule)}
               className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs transition-all shadow-md cursor-pointer active:scale-95"
+              title="Acak Token Baru untuk Sesi Utama ini"
             >
               <RefreshCw className="w-4 h-4" /> Acak Token Baru
             </button>
@@ -784,11 +915,12 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
 
           {activePrimarySchedule && (
             <button
-              onClick={() => handleDownloadOfflineCbt(activePrimarySchedule)}
-              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all shadow-md cursor-pointer"
-              title="Download Aplikasi CBT Offline Mandiri (.html) dengan Token & Paket ini"
+              onClick={() => handleDownloadJsonPackage(activePrimarySchedule)}
+              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black px-4 py-2.5 rounded-xl text-xs transition-all shadow-md cursor-pointer active:scale-95"
+              title="Download File Paket Ujian (.json) dengan Token Terbaru untuk Setting Ujian di Komputer Lab / Siswa"
             >
-              <Download className="w-4 h-4" /> Download CBT Offline (.html)
+              <FileJson className="w-4 h-4 text-emerald-100" />
+              <span>Download Paket Ujian (.json)</span>
             </button>
           )}
         </div>
@@ -948,6 +1080,16 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                             <Users className="w-3.5 h-3.5 text-indigo-500" />
                             <span className="font-medium">Kelas: <b>{item.targetKelas || 'Semua Kelas'}</b></span>
                           </div>
+                          {/* Teacher Identification */}
+                          {(() => {
+                            const teacher = getTeacherForPackage(item);
+                            return (
+                              <div className="flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-md mt-1 w-fit">
+                                <User className="w-3 h-3 text-indigo-600 shrink-0" />
+                                <span>Guru: <b>{teacher.nama}</b> ({teacher.kodeGuru})</span>
+                              </div>
+                            );
+                          })()}
                           {item.keterangan && (
                             <div className="text-[10px] text-slate-400 italic mt-0.5 truncate max-w-xs">
                               {item.keterangan}
@@ -963,7 +1105,7 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                             <Layers className="w-3.5 h-3.5 text-indigo-600" /> {item.paketSoal}
                           </span>
                           <div className="font-mono text-[10px] text-slate-500 font-bold mt-1">
-                            Kode: {item.kodePaket}
+                            Kode: {item.kodePaket} • Mapel: {item.mapel || config.mapel}
                           </div>
                           <div className="text-[10px] text-emerald-700 font-semibold mt-0.5">
                             ✓ {packageQuestions.length} Butir Soal Terkoneksi
@@ -997,6 +1139,11 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                           <span className="font-mono font-black text-base text-amber-400 tracking-widest select-all">
                             {item.token}
                           </span>
+                          {item.tokenCreatedAt && (
+                            <span className="text-[8px] text-slate-500">
+                              Diacak: {new Date(item.tokenCreatedAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
                           <div className="flex items-center gap-1 pt-1 border-t border-slate-800 w-full justify-center">
                             <button
                               onClick={() => handleCopy(item.id, item.token)}
@@ -1058,17 +1205,18 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                         </div>
                       </td>
 
-                      {/* 7. Download & Aksi Paket */}
+                      {/* 7. Download Paket (.json) & Aksi */}
                       <td className="py-4 px-4 align-middle text-right">
                         <div className="flex flex-col items-end gap-1.5">
-                          {/* Main Download Button */}
-                          <div className="flex items-center gap-1">
+                          {/* Main Action: Download Paket .json */}
+                          <div className="flex items-center gap-1.5">
                             <button
-                              onClick={() => handleDownloadOfflineCbt(item)}
-                              className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold px-3 py-1.5 rounded-xl text-[11px] transition shadow-xs flex items-center gap-1.5 cursor-pointer"
-                              title="Download Aplikasi CBT Offline Standalone HTML untuk Paket & Token ini"
+                              onClick={() => handleDownloadJsonPackage(item)}
+                              className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold px-3.5 py-1.5 rounded-xl text-[11px] transition shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                              title={`Download File Paket Ujian (.json) dengan Token "${item.token}" buatan ${getTeacherForPackage(item).nama} (${getTeacherForPackage(item).kodeGuru}) untuk Setting Ujian Siswa/Lab`}
                             >
-                              <Download className="w-3.5 h-3.5" /> Download CBT (.html)
+                              <FileJson className="w-3.5 h-3.5 text-white" />
+                              <span>Download Paket (.json)</span>
                             </button>
 
                             <button
@@ -1088,26 +1236,26 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                             </button>
 
                             <button
-                              onClick={() => handleDownloadJsonPackage(item)}
-                              className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold p-1.5 rounded-xl text-xs transition cursor-pointer"
-                              title="Download File JSON Paket Soal"
+                              onClick={() => handleDownloadOfflineCbt(item)}
+                              className="bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 font-bold p-1.5 rounded-xl text-xs transition border border-slate-200 cursor-pointer"
+                              title="Download Standalone Offline CBT (.html) - Opsional Alternatif"
                             >
-                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                              <Download className="w-3.5 h-3.5" />
                             </button>
                           </div>
 
                           {/* Action Row */}
-                          <div className="flex items-center gap-1 pt-1">
+                          <div className="flex items-center gap-1 pt-0.5">
                             <button
                               onClick={() => handleOpenEditModal(item)}
-                              className="text-slate-500 hover:text-blue-600 hover:bg-blue-50 p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                              className="text-slate-500 hover:text-blue-600 hover:bg-blue-50 px-2 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                             >
                               <Edit className="w-3.5 h-3.5" /> Edit
                             </button>
 
                             <button
                               onClick={() => handleDeleteSchedule(item.id)}
-                              className="text-slate-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                              className="text-slate-400 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer"
                             >
                               <Trash2 className="w-3.5 h-3.5" /> Hapus
                             </button>
@@ -1127,17 +1275,23 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-amber-900 text-xs space-y-2">
         <div className="flex items-center gap-2 font-bold text-amber-950 text-sm">
           <Info className="w-4.5 h-4.5 text-amber-600 shrink-0" />
-          Petunjuk Distribusi & Keamanan Token Ujian:
+          Petunjuk Distribusi & Setting Ujian Menggunakan Paket .JSON:
         </div>
-        <ul className="list-disc list-inside space-y-1 text-amber-800 text-[11px] leading-relaxed pl-1">
+        <ul className="list-disc list-inside space-y-1.5 text-amber-800 text-[11px] leading-relaxed pl-1">
           <li>
-            <b>Distribusi Tepat Waktu:</b> Bagikan Token kepada siswa sesaat sebelum jam ujian dimulai (atau tayangkan di proyektor kelas) agar siswa tidak dapat membuka soal sebelum waktunya.
+            <b>Gunakan File Paket (.json) untuk Setting Ujian:</b> Setiap kali menyetting ujian di komputer proktor/lab atau membagikan soal ke peserta, gunakan tombol <code>Download Paket (.json)</code>. File paket .json ini secara otomatis memuat butir soal aktif serta Token terbaru hasil pengacakan.
           </li>
           <li>
-            <b>Paket Berbeda Antar Sesi:</b> Gunakan Paket A untuk Sesi 1 dan Paket B untuk Sesi 2 agar peserta sesi siang tidak mendapatkan bocoran soal dari peserta sesi pagi.
+            <b>Identifikasi Pembuat Paket:</b> File paket .json mencantumkan identitas Guru Pengampu dan Token spesifik (misal: <code>Paket_PKT-SOS-A_Sosiologi_GURU01_TOKEN_K9X8P2.json</code>), sehingga memudahkan admin dan pengawas membedakan paket soal antar guru dan antar sesi.
           </li>
           <li>
-            <b>Download CBT Offline Mandiri:</b> Tombol <code>Download CBT (.html)</code> menghasilkan file web aplikasi mandiri tanpa internet yang sudah memuat paket soal & token khusus tersebut. File ini dapat langsung dicopy ke flashdisk / komputer lab.
+            <b>Distribusi Tepat Waktu:</b> Bagikan Token kepada siswa sesaat sebelum jam ujian dimulai (atau tayangkan di layar proyektor) agar siswa tidak dapat membuka soal sebelum waktunya.
+          </li>
+          <li>
+            <b>Paket Berbeda Antar Sesi:</b> Gunakan Paket A untuk Sesi 1 dan Paket B/C untuk Sesi berikutnya agar peserta sesi siang tidak mendapatkan soal yang sama dari peserta sesi pagi.
+          </li>
+          <li>
+            <b>Download CBT Offline (.html) Opsional:</b> Tombol icon download HTML tetap tersedia sebagai alternatif jika ingin menjalankan ujian CBT tanpa web server sama sekali.
           </li>
         </ul>
       </div>
@@ -1200,6 +1354,24 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                     placeholder="Misal: XII IPS 1, XII IPS 2"
                     className="w-full border border-slate-300 rounded-xl p-2.5 font-medium text-slate-800 focus:border-amber-500 focus:outline-none"
                   />
+                </div>
+
+                {/* Guru Pengampu (Pembuat Paket) */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 uppercase tracking-wider text-[10px]">
+                    Guru Pengampu (Pembuat Paket) *
+                  </label>
+                  <select
+                    value={formKodeGuru}
+                    onChange={(e) => setFormKodeGuru(e.target.value)}
+                    className="w-full border border-slate-300 rounded-xl p-2.5 font-bold text-slate-800 focus:border-amber-500 focus:outline-none bg-white"
+                  >
+                    {teachersList.map((t) => (
+                      <option key={t.id} value={t.kodeGuru || t.nip}>
+                        {t.nama} ({t.kodeGuru || t.nip}) - {t.mapel}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Mata Pelajaran */}
@@ -1380,7 +1552,7 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
               </div>
 
               {/* Submit Buttons */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
+              <div className="pt-4 border-t border-slate-200 flex flex-wrap items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -1389,10 +1561,19 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                   Batal
                 </button>
                 <button
-                  type="submit"
-                  className="px-6 py-2.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 rounded-xl font-black transition shadow-md cursor-pointer"
+                  type="button"
+                  onClick={(e) => handleSaveModalForm(e, true)}
+                  className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-black transition shadow-md flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  title="Simpan pengaturan dan langsung download file paket .json dengan token terbaru"
                 >
-                  {editingToken ? 'Simpan Perubahan Jadwal' : 'Simpan & Generate Token'}
+                  <FileJson className="w-4 h-4 text-emerald-100" />
+                  <span>Simpan & Download Paket (.json)</span>
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 rounded-xl font-black transition shadow-md cursor-pointer"
+                >
+                  {editingToken ? 'Simpan Jadwal Saja' : 'Simpan Jadwal'}
                 </button>
               </div>
             </form>

@@ -140,26 +140,67 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
         const restoredConfig = parsed.config || (parsed.questions ? parsed : null);
         if (!restoredConfig || !Array.isArray(restoredConfig.questions)) {
-          triggerError('File backup JSON tidak memiliki struktur data Bank Soal yang valid!');
+          triggerError('File paket JSON tidak memiliki struktur data Bank Soal yang valid!');
           return;
         }
 
-        const activeExamToken = restoredConfig.examToken || config.examToken || 'SOS2026';
+        const paketInfo = parsed.paketInfo || {};
+        const guruInfo = parsed.guru || {};
+        const activeExamToken = (
+          paketInfo.token ||
+          parsed.examToken ||
+          restoredConfig.examToken ||
+          config.examToken ||
+          'SOS2026'
+        ).trim().toUpperCase();
+
+        const guruName = guruInfo.namaGuru || paketInfo.namaGuru || 'Guru Pengampu';
+        const kodeGuru = guruInfo.kodeGuru || paketInfo.kodeGuru || restoredConfig.kodeGuru || 'GURU01';
+        const mapelName = paketInfo.mapel || restoredConfig.mapel || config.mapel || 'Sosiologi';
+        const paketName = paketInfo.paketSoal || restoredConfig.mapelTitle || 'Paket Ujian';
+
         const finalRestoredConfig = {
+          ...config,
           ...restoredConfig,
+          mapel: mapelName,
+          mapelTitle: restoredConfig.mapelTitle || `${mapelName} - ${paketName}`,
           examToken: activeExamToken,
+          duration: paketInfo.durasiMenit || restoredConfig.duration || config.duration,
+          kkm: paketInfo.kkm || restoredConfig.kkm || config.kkm,
+          kodeGuru: kodeGuru,
+          questions: restoredConfig.questions,
+          scheduleTokens: restoredConfig.scheduleTokens || (paketInfo.id ? [
+            {
+              id: paketInfo.id,
+              namaSesi: paketInfo.namaSesi || 'Sesi Ujian',
+              tanggalUjian: paketInfo.tanggalUjian || '',
+              jamMulai: paketInfo.jamMulai || '08:00',
+              jamSelesai: paketInfo.jamSelesai || '10:00',
+              durasiMenit: paketInfo.durasiMenit || 60,
+              kkm: paketInfo.kkm || 75,
+              mapel: mapelName,
+              kodeGuru: kodeGuru,
+              targetKelas: paketInfo.targetKelas || 'Semua Kelas',
+              paketSoal: paketName,
+              kodePaket: paketInfo.kodePaket || 'PKT-A',
+              token: activeExamToken,
+              status: 'ACTIVE' as const,
+              isPrimaryActive: true,
+            }
+          ] : config.scheduleTokens),
         };
 
         if (onSaveConfig) {
           onSaveConfig(finalRestoredConfig);
+          setTokenInput(activeExamToken);
           setErrorMsg('');
           setSuccessMsg(
-            `Paket Ujian "${finalRestoredConfig.mapel || 'CBT'}" Berhasil Dimuat! Token Aktif Tersinkron: "${activeExamToken}" (${finalRestoredConfig.questions.length} Soal)`
+            `Paket "${mapelName} (${paketName})" dengan Token "${activeExamToken}" karya ${guruName} (${kodeGuru}) Berhasil Disetting! (${finalRestoredConfig.questions.length} Butir Soal)`
           );
         }
       } catch (err: any) {
         console.error(err);
-        triggerError(err.message || 'Gagal membaca/mendekripsi file JSON! Pastikan file adalah backup terenkripsi resmi CBT.');
+        triggerError(err.message || 'Gagal membaca file JSON! Pastikan file adalah paket ujian .json resmi CBT GURUAI.');
       }
     };
     reader.readAsText(file);
@@ -628,11 +669,11 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </>
               )}
 
-              {/* Quick Import JSON Exam Package Bar */}
+              {/* Quick Setting Ujian dengan File Paket JSON */}
               <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
-                <label className="bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border border-indigo-200 rounded-xl p-2.5 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition active:scale-98">
-                  <FileUp className="w-4 h-4 text-indigo-600" />
-                  <span>Impor Paket Ujian</span>
+                <label className="bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl p-2.5 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition active:scale-98 shadow-xs">
+                  <FileSpreadsheet className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>Setting Ujian dengan File Paket (.json)</span>
                   <input
                     type="file"
                     accept=".json"
@@ -647,7 +688,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   className="text-[11px] font-semibold text-slate-500 hover:text-indigo-600 flex items-center justify-center gap-1 py-1 cursor-pointer"
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Panduan Sync Soal & Token di HP/Laptop Lain</span>
+                  <span>Panduan Setting Paket .json & Token Terbaru</span>
                 </button>
               </div>
             </div>
