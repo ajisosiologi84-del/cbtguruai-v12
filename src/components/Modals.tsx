@@ -25,7 +25,7 @@ export const WarningModal: React.FC<WarningModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/90 z-[1000] flex items-center justify-center p-4 backdrop-blur-md animate-fade-in select-none">
+    <div className="fixed inset-0 bg-slate-950/90 z-[10001] flex items-center justify-center p-4 backdrop-blur-md animate-fade-in select-none">
       <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 text-center shadow-2xl transform scale-100 transition-transform border-4 border-red-500 animate-bounce-subtle space-y-4">
         <div className="w-18 h-18 bg-red-100 rounded-3xl flex items-center justify-center text-red-600 mx-auto shadow-inner border border-red-300 animate-pulse">
           <AlertTriangle className="w-10 h-10 text-red-600 animate-spin-slow" />
@@ -126,7 +126,7 @@ export const AlertModal: React.FC<AlertModalProps> = ({ isOpen, message, onClose
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-[110] flex items-center justify-center p-4 backdrop-blur-xs animate-fade-in">
+    <div className="fixed inset-0 bg-black/60 z-[10002] flex items-center justify-center p-4 backdrop-blur-xs animate-fade-in">
       <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl text-center border border-gray-100">
         <div className="text-amber-500 mb-3 flex justify-center">
           <Info className="w-12 h-12 text-blue-600" />

@@ -92,9 +92,17 @@ export const TestView: React.FC<TestViewProps> = ({
     };
   }, []);
 
+  // When warnings prop updates, auto-clear blackout so student can continue
+  useEffect(() => {
+    if (warnings > 0) {
+      setIsBlackedOut(false);
+    }
+  }, [warnings]);
+
   const handleReenterFullscreen = async () => {
     await requestAppFullscreen();
     setIsFullscreenMode(true);
+    setIsBlackedOut(false);
     setSplitScreenInfo({ isSplit: false, reason: '' });
   };
 
@@ -369,14 +377,6 @@ export const TestView: React.FC<TestViewProps> = ({
 
       {/* Main Examination Canvas */}
       <main className="flex-1 flex overflow-hidden relative no-capture">
-        {/* Dynamic Anti-Leak Watermark Grid Overlay */}
-        <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden flex flex-wrap justify-around items-center select-none opacity-15 rotate-[-22deg] p-4 font-mono text-[11px] font-black text-slate-800 leading-loose tracking-widest">
-          {Array.from({ length: 12 }).map((_, idx) => (
-            <div key={idx} className="m-8 whitespace-nowrap">
-              {studentName || 'PESERTA UJIAN'} • NIS: {noPeserta || 'CBT-2026'} • DILARANG MEREKAM / SCREENSHOT
-            </div>
-          ))}
-        </div>
         {/* Left Area: Current Question */}
         <div className="flex-1 flex flex-col p-3 sm:p-6 overflow-y-auto custom-scrollbar">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 sm:p-8 max-w-4xl w-full mx-auto flex-1 flex flex-col my-auto sm:my-0">

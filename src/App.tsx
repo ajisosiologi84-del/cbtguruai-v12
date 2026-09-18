@@ -161,7 +161,17 @@ export default function App() {
       const saved = localStorage.getItem(RESULTS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) {
+          const seenIds = new Set<string>();
+          return parsed.map((r, idx) => {
+            let uniqueId = r.id;
+            if (!uniqueId || seenIds.has(uniqueId)) {
+              uniqueId = `RES-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`;
+            }
+            seenIds.add(uniqueId);
+            return { ...r, id: uniqueId };
+          });
+        }
       }
     } catch (e) {
       console.error('Failed to load student results:', e);
@@ -187,13 +197,27 @@ export default function App() {
   }, []);
 
   const saveStudentResults = useCallback((results: StudentResult[]) => {
-    setStudentResults(results);
+    const seenIds = new Set<string>();
+    const sanitizedResults = results.map((r, idx) => {
+      let uniqueId = r.id;
+      if (!uniqueId || seenIds.has(uniqueId)) {
+        uniqueId = `RES-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`;
+      }
+      seenIds.add(uniqueId);
+      return { ...r, id: uniqueId };
+    });
+    setStudentResults(sanitizedResults);
     try {
-      localStorage.setItem(RESULTS_KEY, JSON.stringify(results));
+      localStorage.setItem(RESULTS_KEY, JSON.stringify(sanitizedResults));
     } catch (e) {
       console.error('Failed to save student results:', e);
     }
   }, []);
+
+  // View State & Admin Role
+  const [viewState, setViewState] = useState<ViewState>('login');
+  const [adminRole, setAdminRole] = useState<'admin' | 'teacher'>('admin');
+  const [loggedInTeacher, setLoggedInTeacher] = useState<TeacherUser | null>(null);
 
   // Helper to merge remote config without losing locally updated token
   const mergeRemoteConfigWithLocalToken = (remoteConfig: AppConfig): AppConfig => {
@@ -219,9 +243,15 @@ export default function App() {
     };
   };
 
-  // Firebase Synchronization Effect
+  // Firebase Synchronization Effect (Solusi A - Optimasi Kuota: Listener Realtime HANYA aktif untuk Guru/Admin)
   useEffect(() => {
-    // Initial fetch from Firebase
+    // Siswa diset Write-Only (hanya kirim nilai akhir).
+    // Jangan buka listener atau query terus-menerus di perangkat siswa/halaman login agar kuota 50k reads tidak habis oleh 360 siswa.
+    if (viewState !== 'admin') {
+      return;
+    }
+
+    // Initial fetch from Firebase (Hanya dieksekusi saat Admin / Guru masuk)
     loadConfigFromFirebase().then((remoteConfig) => {
       if (remoteConfig && Array.isArray(remoteConfig.questions) && remoteConfig.questions.length > 0) {
         const merged = mergeRemoteConfigWithLocalToken(remoteConfig);
@@ -239,7 +269,7 @@ export default function App() {
       }
     }).catch(() => {});
 
-    // Fetch Teachers, Students, and Admins from Firebase without auto-seeding write spikes
+    // Fetch Teachers, Students, and Admins from Firebase for Admin/Teacher dashboard
     loadTeachersFromFirebase().then((remoteTeachers) => {
       if (remoteTeachers && remoteTeachers.length > 0) {
         setConfig((prev) => {
@@ -285,7 +315,7 @@ export default function App() {
       }
     }).catch(() => {});
 
-    // Realtime subscribers
+    // Realtime subscribers (HANYA AKTIF SAAT viewState === 'admin')
     const unsubConfig = subscribeConfigFromFirebase((remoteConfig) => {
       if (remoteConfig && Array.isArray(remoteConfig.questions) && remoteConfig.questions.length > 0) {
         const merged = mergeRemoteConfigWithLocalToken(remoteConfig);
@@ -352,7 +382,7 @@ export default function App() {
       unsubAdmins();
       unsubResults();
     };
-  }, []);
+  }, [viewState]);
 
   // Google Apps Script Auto-Sync Effect for Fresh Browsers
   useEffect(() => {
@@ -402,11 +432,6 @@ export default function App() {
     }
   }, []);
 
-  // View State & Admin Role
-  const [viewState, setViewState] = useState<ViewState>('login');
-  const [adminRole, setAdminRole] = useState<'admin' | 'teacher'>('admin');
-  const [loggedInTeacher, setLoggedInTeacher] = useState<TeacherUser | null>(null);
-
   // Student Session State
   const [studentInfo, setStudentInfo] = useState<StudentInfo>({
     name: 'Ahmad Fauzi',
@@ -421,8 +446,28 @@ export default function App() {
   const [raguList, setRaguList] = useState<boolean[]>([]);
   const [timeRemaining, setTimeRemaining] = useState<number>(0); // in seconds
   const [warnings, setWarnings] = useState<number>(0);
-  const maxWarnings = config.examSchedule?.maxCheatingAllowed || 3;
+  const currentTeacherConfig = studentInfo.kodeGuru ? config.teacherConfigs?.[studentInfo.kodeGuru] : undefined;
+  const currentExamSchedule = currentTeacherConfig?.examSchedule ?? config.examSchedule;
+  const rawMax = currentExamSchedule?.maxCheatingAllowed ?? config.examSchedule?.maxCheatingAllowed;
+  const parsedMax = Number(rawMax);
+  const maxWarnings = !isNaN(parsedMax) && parsedMax > 0 ? Math.round(parsedMax) : 3;
+
   const [cheatingLogs, setCheatingLogs] = useState<CheatingLog[]>([]);
+
+  // Refs to prevent race conditions and duplicate trigger cascades
+  const isWarningModalOpenRef = useRef(false);
+  const lastViolationTimeRef = useRef(0);
+  const warningsRef = useRef(0);
+  const isAutoSubmittingRef = useRef(false);
+  const maxWarningsRef = useRef(maxWarnings);
+
+  useEffect(() => {
+    warningsRef.current = warnings;
+  }, [warnings]);
+
+  useEffect(() => {
+    maxWarningsRef.current = maxWarnings;
+  }, [maxWarnings]);
   const [ipAddress, setIpAddress] = useState<string>('180.252.12.11');
   const [deviceInfo, setDeviceInfo] = useState<string>('Browser Client (Desktop)');
 
@@ -753,7 +798,14 @@ export default function App() {
 
   const handleTriggerWarning = useCallback(
     (customMsg?: string) => {
-      if (viewState !== 'test' || isWarningModalOpen) return;
+      if (viewState !== 'test' || isAutoSubmittingRef.current) return;
+
+      const now = Date.now();
+      // Debounce & Lock: ignore duplicate trigger cascades during open modal or within 2.5s cooldown
+      if (isWarningModalOpenRef.current || now - lastViolationTimeRef.current < 2500) {
+        return;
+      }
+      lastViolationTimeRef.current = now;
 
       clearClipboard();
       playWarningSound();
@@ -769,30 +821,41 @@ export default function App() {
         },
       ]);
 
-      setWarnings((prev) => {
-        const nextWarnings = prev + 1;
-        if (nextWarnings >= maxWarnings) {
-          triggerAutoSubmit(
-            `Anda telah melanggar batas maksimal peringatan keamanan (${maxWarnings} kali). Ujian dihentikan paksa dan jawaban otomatis terkirim.`
-          );
-          return nextWarnings;
-        }
+      const currentCount = warningsRef.current;
+      const nextWarnings = currentCount + 1;
+      setWarnings(nextWarnings);
+      warningsRef.current = nextWarnings;
 
+      const limit = maxWarningsRef.current;
+
+      // Only finish the exam when maximum violations provided are reached or exceeded
+      if (nextWarnings >= limit) {
+        isWarningModalOpenRef.current = false;
+        setIsWarningModalOpen(false);
+        triggerAutoSubmit(
+          `Anda telah mencapai batas maksimal peringatan keamanan (${limit} dari ${limit} kali). Sesuai ketentuan, ujian Anda telah selesai dan seluruh jawaban tersimpan secara otomatis.`
+        );
+      } else {
+        // Do NOT finish the exam! Show warning modal and allow continuing
+        isWarningModalOpenRef.current = true;
         setWarningMsg(logMsg);
         setIsWarningModalOpen(true);
-        return nextWarnings;
-      });
+      }
     },
-    [viewState, isWarningModalOpen, maxWarnings, playWarningSound]
+    [viewState, playWarningSound]
   );
 
   const triggerAutoSubmit = (msg: string) => {
+    if (isAutoSubmittingRef.current) return;
+    isAutoSubmittingRef.current = true;
+    isWarningModalOpenRef.current = false;
     setIsWarningModalOpen(false);
     showAlert(msg);
     exitAppFullscreen().catch(() => {});
     setTimeout(() => {
       setAlertMsg(null);
       processSubmission();
+      isAutoSubmittingRef.current = false;
     }, 2500);
   };
 
@@ -851,7 +914,7 @@ export default function App() {
         e.preventDefault();
         clearClipboard();
         playWarningSound();
-        showAlert('🚨 Peringatan Keamanan: Pintasan Keyboard Terlarang Diblokir!');
+        handleTriggerWarning('🚨 Pintasan Keyboard Terlarang (Shortcut / Screenshot / DevTools) Diblokir!');
       }
     };
 
@@ -872,7 +935,7 @@ export default function App() {
     const intervalChecker = setInterval(() => {
       if (viewState !== 'test') return;
       const splitCheck = checkSplitScreenViolation();
-      if (splitCheck.isSplit && !isWarningModalOpen) {
+      if (splitCheck.isSplit && !isWarningModalOpenRef.current) {
         handleTriggerWarning(`🚫 Split Screen Aktif: ${splitCheck.reason}`);
       }
     }, 2000);
@@ -902,7 +965,7 @@ export default function App() {
       document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
       document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
     };
-  }, [viewState, isWarningModalOpen, handleTriggerWarning, playWarningSound]);
+  }, [viewState, handleTriggerWarning, playWarningSound]);
 
   // Handle Question Answer Selection
   const handleAnswerOption = (optId: string) => {
@@ -922,12 +985,7 @@ export default function App() {
   };
 
   const handleScreenRecordDetected = (reason: string) => {
-    setIsWarningModalOpen(false);
-    playWarningSound();
-    setAlertMsg(
-      `PERINGATAN PEREKAMAN LAYAR TERDETEKSI!\nSistem mendeteksi percobaan Perekaman Layar / Screen Capture ("${reason}").\n\nUntuk menjaga kerahasiaan soal, ujian dihentikan dan SELURUH JAWABAN ANDA TELAH TERSIMPAN AMAN.\nFile tanda bukti (.cbt) berhasil diunduh secara otomatis!`
-    );
-    processSubmission(true, reason);
+    handleTriggerWarning(`🚨 Percobaan Tangkapan Layar / Perekaman Layar Terdeteksi (${reason})`);
   };
 
   // Submit Exam & Save Encrypted Student Result
@@ -1258,7 +1316,10 @@ export default function App() {
         maxWarnings={maxWarnings}
         customMsg={warningMsg}
         onUnderstand={() => {
+          isWarningModalOpenRef.current = false;
           setIsWarningModalOpen(false);
+          // Grace period of 2 seconds so re-focusing and entering fullscreen does not immediately re-trigger a violation
+          lastViolationTimeRef.current = Date.now() + 2000;
           if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen().catch(() => {});
           }
@@ -1277,7 +1338,13 @@ export default function App() {
       <AlertModal
         isOpen={alertMsg !== null}
         message={alertMsg || ''}
-        onClose={() => setAlertMsg(null)}
+        onClose={() => {
+          setAlertMsg(null);
+          if (isAutoSubmittingRef.current) {
+            processSubmission();
+            isAutoSubmittingRef.current = false;
+          }
+        }}
       />
 
       <QuestionEditorModal

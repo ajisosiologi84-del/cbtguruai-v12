@@ -7362,11 +7362,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    filteredStudentResults.map((r) => {
+                    filteredStudentResults.map((r, idx) => {
                       const isSelected = selectedResultIds.includes(r.id);
                       return (
                         <tr
-                          key={r.id}
+                          key={r.id ? `${r.id}-${idx}` : idx}
                           className={`transition-colors ${
                             isSelected ? 'bg-blue-50/70' : 'hover:bg-slate-50/80'
                           }`}

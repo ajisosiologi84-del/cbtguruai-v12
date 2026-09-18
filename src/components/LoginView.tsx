@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AppConfig, StudentInfo, StudentUser, StudentResult, TeacherUser, ExamScheduleToken } from '../types';
-import { User, Key, LogIn, Settings, AlertCircle, KeyRound, Users, GraduationCap, BookOpen, UserCheck, FileUp, HelpCircle, CheckCircle2, Download, Sparkles, Building2, Trophy, Crown, Medal, Award, Flame, ChevronDown, ChevronUp, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { User, Key, LogIn, Settings, AlertCircle, KeyRound, Users, GraduationCap, BookOpen, UserCheck, FileUp, HelpCircle, CheckCircle2, Download, Sparkles, Building2, Trophy, Crown, Medal, Award, Flame, ChevronDown, ChevronUp, FileSpreadsheet, RefreshCw, FileJson } from 'lucide-react';
 import { CbtLogo } from './CbtLogo';
 import { decryptAppBackup } from '../utils/crypto';
 import { loadTeachersFromFirebase, loadAdminsFromFirebase } from '../lib/firebase';
@@ -669,10 +669,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
                 </>
               )}
 
-              {/* Quick Setting Ujian dengan File Paket JSON */}
+              {/* Quick Setting Ujian dengan File Paket JSON (Solusi B: Offline / Lab Komputer) */}
               <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
                 <label className="bg-amber-50 hover:bg-amber-100 active:bg-amber-200 text-amber-900 border border-amber-300 rounded-xl p-2.5 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition active:scale-98 shadow-xs">
-                  <FileSpreadsheet className="w-4 h-4 text-amber-600 shrink-0" />
+                  <FileJson className="w-4 h-4 text-amber-600 shrink-0" />
                   <span>Setting Ujian dengan File Paket (.json)</span>
                   <input
                     type="file"
@@ -872,7 +872,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                                 const rank = idx + 4;
                                 const isPassed = res.score >= (config.kkm || 75);
                                 return (
-                                  <tr key={res.id || idx} className="hover:bg-indigo-900/20 transition-colors">
+                                  <tr key={res.id ? `${res.id}-${idx}` : idx} className="hover:bg-indigo-900/20 transition-colors">
                                     <td className="p-2.5 text-center font-mono font-bold text-indigo-300">
                                       #{rank}
                                     </td>
@@ -935,22 +935,31 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
             <div className="text-xs text-slate-700 space-y-3 leading-relaxed">
               <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl">
-                <p className="font-bold text-blue-900 mb-1">💡 Mengapa Token / Soal Terbaru Belum Muncul di Perangkat Siswa?</p>
+                <p className="font-bold text-blue-900 mb-1">💡 2 Pilihan Metode Pelaksanaan Ujian (Solusi A & Solusi B)</p>
                 <p>
-                  Aplikasi CBT ini adalah <b>Aplikasi CBT Standalone Berbasis Browser</b>. Seluruh data disimpan dengan aman di peramban (browser) lokal masing-masing perangkat.
+                  Sistem CBT ini mendukung <b>Solusi A (Cloud Firebase Hemat Kuota)</b> dan <b>Solusi B (Offline / File .json Lokal)</b> untuk menjamin kelancaran 360+ siswa tanpa kendala kuota harian.
                 </p>
               </div>
 
               <div className="space-y-2">
-                <p className="font-bold text-slate-900">Cara Menghubungkan Perangkat Siswa / HP Pengawas:</p>
-                <ol className="list-decimal pl-4 space-y-1.5 text-slate-600">
-                  <li>
-                    <b>Langkah 1 (Guru):</b> Buka <b>Panel Guru</b> → Klik tombol <b>"Paket Soal (.json)"</b> atau <b>"Backup Data (.json)"</b>.
-                  </li>
-                  <li>
-                    <b>Langkah 2 (Siswa/Pengawas):</b> Pada HP/Laptop yang akan digunakan ujian, klik tombol <b>"Impor Paket Ujian"</b> di halaman Login ini, lalu pilih file JSON tersebut.
-                  </li>
-                </ol>
+                <p className="font-bold text-slate-900">Petunjuk Pelaksanaan:</p>
+                <div className="space-y-2 text-slate-600">
+                  <div className="p-2.5 bg-indigo-50 border border-indigo-200 rounded-xl">
+                    <p className="font-bold text-indigo-900">🌐 Solusi A (Online Firebase / Cloud - Otomatis):</p>
+                    <p className="text-[11px] mt-0.5">
+                      Perangkat siswa diset <i>write-only</i> (hanya mengirim nilai saat selesai). Siswa cukup memasukkan NIS dan Token dari Guru, lalu hasil akan otomatis masuk ke Dashboard Guru secara realtime tanpa menghabiskan kuota reads.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                    <p className="font-bold text-amber-900">📁 Solusi B (Offline File Paket .json - Cadangan Lab):</p>
+                    <p className="text-[11px] mt-0.5">
+                      Jika internet lab tidak stabil atau offline:
+                      <br />1. Guru unduh paket di Panel Guru: <b>Download Paket (.json)</b>.
+                      <br />2. Di komputer lab/siswa, klik <b>"Setting Ujian dengan File Paket (.json)"</b> di halaman login. Soal & Token langsung aktif tanpa internet!
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-emerald-900 font-medium text-xs">
