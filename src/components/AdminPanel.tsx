@@ -7,6 +7,8 @@ import { generateResultsPdfReport, generateIndividualStudentPdf, generateItemAna
 import { DownloadAnimationModal } from './DownloadAnimationModal';
 import { ExportQuestionModal } from './ExportQuestionModal';
 import { ExamCardPrintModal } from './ExamCardPrintModal';
+import { AttendancePrintModal } from './AttendancePrintModal';
+import { SupabaseBackupModal } from './SupabaseBackupModal';
 import { ExcelGuideModal } from './ExcelGuideModal';
 import { GoogleSheetsModal } from './GoogleSheetsModal';
 import { JsonQuestionsModal } from './JsonQuestionsModal';
@@ -157,6 +159,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [selectedAuditResult, setSelectedAuditResult] = useState<StudentResult | null>(null);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isExamCardPrintModalOpen, setIsExamCardPrintModalOpen] = useState(false);
+  const [isAttendancePrintModalOpen, setIsAttendancePrintModalOpen] = useState(false);
+  const [isSupabaseBackupModalOpen, setIsSupabaseBackupModalOpen] = useState(false);
 
   // Download Animation Modal State
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
@@ -5603,10 +5607,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </button>
 
                     <button
+                      onClick={() => setIsAttendancePrintModalOpen(true)}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                    >
+                      <FileCheck className="w-4 h-4 text-blue-100" /> Cetak Daftar Hadir
+                    </button>
+
+                    <button
                       onClick={() => setIsGoogleSheetsModalOpen(true)}
                       className="bg-teal-700 hover:bg-teal-800 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
                     >
                       <FileSpreadsheet className="w-4 h-4 text-teal-200" /> Google Sheets (CRUD)
+                    </button>
+
+                    <button
+                      onClick={() => setIsSupabaseBackupModalOpen(true)}
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                    >
+                      <Database className="w-4 h-4 text-emerald-200" /> Backup Supabase (User)
                     </button>
 
                     <button
@@ -10092,6 +10110,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 kopSekolah: updatedKop,
               },
             },
+          });
+        }}
+      />
+
+      {/* MODAL: CETAK DAFTAR HADIR & BERITA ACARA UJIAN */}
+      <AttendancePrintModal
+        isOpen={isAttendancePrintModalOpen}
+        onClose={() => setIsAttendancePrintModalOpen(false)}
+        students={displayStudentsList}
+        teachers={teachersList}
+        kopSekolah={config.kopSekolah}
+        examSchedule={config.examSchedule}
+        onSaveKopSekolah={(updatedKop) => {
+          setKopForm(updatedKop);
+          onSaveConfig({
+            ...config,
+            kopSekolah: updatedKop,
+          });
+        }}
+      />
+
+      {/* MODAL: BACKUP CLOUD MASTER DATA USER (SUPABASE) */}
+      <SupabaseBackupModal
+        isOpen={isSupabaseBackupModalOpen}
+        onClose={() => setIsSupabaseBackupModalOpen(false)}
+        students={displayStudentsList}
+        teachers={teachersList}
+        admins={adminsList}
+        showAlert={showAlert}
+        onRestoreUsers={(data) => {
+          if (data.students && data.students.length > 0) {
+            saveAllStudentsToFirebase(data.students);
+          }
+          if (data.teachers && data.teachers.length > 0) {
+            setTeachersList(data.teachers);
+            saveAllTeachersToFirebase(data.teachers);
+          }
+          if (data.admins && data.admins.length > 0) {
+            setAdminsList(data.admins);
+            saveAllAdminsToFirebase(data.admins);
+          }
+          onSaveConfig({
+            ...config,
+            students: data.students.length > 0 ? data.students : config.students,
+            teachers: data.teachers.length > 0 ? data.teachers : config.teachers,
+            admins: data.admins.length > 0 ? data.admins : config.admins,
           });
         }}
       />

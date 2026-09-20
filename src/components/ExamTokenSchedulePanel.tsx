@@ -70,6 +70,9 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   const [includeDaftarHadir, setIncludeDaftarHadir] = useState<boolean>(true);
   const [includeKartuToken, setIncludeKartuToken] = useState<boolean>(true);
   const [studentStatusFilter, setStudentStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
+  const [targetRowsPerClass, setTargetRowsPerClass] = useState<number>(36);
+  const [selectedPaperSize, setSelectedPaperSize] = useState<'a4' | 'f4' | 'letter' | 'legal'>('a4');
+  const [showDigitalSignatures, setShowDigitalSignatures] = useState<boolean>(true);
 
   // Form State
   const [formNamaSesi, setFormNamaSesi] = useState('');
@@ -641,6 +644,27 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
       return s.isActive === false;
     });
 
+    // Create padded rows for attendance signature list (e.g. 36 per class standard)
+    const fullStudentRows: Array<{ nis: string; nama: string; kelas: string; isBlank?: boolean }> =
+      activeStudentsList.map((st) => ({
+        nis: st.nis,
+        nama: st.nama,
+        kelas: st.kelas,
+        isBlank: false,
+      }));
+
+    if (targetRowsPerClass > 0 && fullStudentRows.length < targetRowsPerClass) {
+      const paddingNeeded = targetRowsPerClass - fullStudentRows.length;
+      for (let i = 0; i < paddingNeeded; i++) {
+        fullStudentRows.push({
+          nis: '...................',
+          nama: '..........................................................',
+          kelas: selectedKelasFilter === 'ALL' ? '-' : selectedKelasFilter,
+          isBlank: true,
+        });
+      }
+    }
+
     const logoHtml = kop.logoSekolah
       ? `<img src="${kop.logoSekolah}" style="max-height: 65px; width: auto;" alt="Logo" />`
       : '';
@@ -648,47 +672,53 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
       ? `<img src="${kop.logoPemda}" style="max-height: 65px; width: auto;" alt="Logo Pemda" />`
       : '';
 
+    const paperSizeCss =
+      selectedPaperSize === 'f4'
+        ? '@page { size: 210mm 330mm portrait; margin: 10mm 12mm; }'
+        : selectedPaperSize === 'legal'
+        ? '@page { size: legal portrait; margin: 10mm 12mm; }'
+        : selectedPaperSize === 'letter'
+        ? '@page { size: letter portrait; margin: 10mm 12mm; }'
+        : '@page { size: A4 portrait; margin: 10mm 12mm; }';
+
     const html = `<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <title>BERITA ACARA PELAKSANAAN UJIAN CBT & DAFTAR HADIR SISWA</title>
   <style>
-    @page { size: A4 portrait; margin: 12mm 15mm; }
+    ${paperSizeCss}
     body { font-family: 'Times New Roman', Times, serif; color: #000; margin: 0; font-size: 12px; line-height: 1.35; background: #fff; }
     
     .header-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; border-bottom: 3px double #000; padding-bottom: 6px; }
     .header-table td { border: none !important; padding: 2px 4px; vertical-align: middle; }
-    .kop-title h2 { margin: 0; font-size: 14px; font-weight: bold; text-transform: uppercase; }
-    .kop-title h1 { margin: 2px 0; font-size: 17px; font-weight: bold; text-transform: uppercase; }
+    .kop-title h2 { margin: 0; font-size: 13px; font-weight: bold; text-transform: uppercase; }
+    .kop-title h1 { margin: 2px 0; font-size: 16px; font-weight: bold; text-transform: uppercase; }
     .kop-title p { margin: 1px 0; font-size: 10px; font-style: italic; }
 
     .doc-title { text-align: center; font-weight: bold; font-size: 14px; margin: 12px 0 4px 0; text-decoration: underline; text-transform: uppercase; letter-spacing: 0.5px; }
     .doc-subtitle { text-align: center; font-size: 11px; margin-bottom: 12px; font-weight: bold; }
 
     .meta-box { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
-    .meta-box td { border: none !important; padding: 3px 6px; font-size: 12px; vertical-align: top; }
+    .meta-box td { border: none !important; padding: 3px 6px; font-size: 11px; vertical-align: top; }
 
     table.data-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-    table.data-table th, table.data-table td { border: 1px solid #000; padding: 5px 7px; font-size: 11px; }
+    table.data-table th, table.data-table td { border: 1px solid #000; padding: 4px 6px; font-size: 10px; }
     table.data-table th { background-color: #f0f0f0; text-align: center; font-weight: bold; text-transform: uppercase; }
     
     .text-center { text-align: center; }
     .text-right { text-align: right; }
     .font-bold { font-weight: bold; }
-    .badge-active { background: #dcfce7; color: #166534; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
-    .badge-inactive { background: #fee2e2; color: #991b1b; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
 
-    .note-box { border: 1px solid #000; padding: 8px; font-size: 11px; min-height: 45px; margin-top: 6px; background: #fafafa; }
+    .note-box { border: 1px solid #000; padding: 8px; font-size: 11px; min-height: 40px; margin-top: 6px; background: #fafafa; }
 
-    .ttd-4-col { width: 100%; margin-top: 25px; border-collapse: collapse; }
-    .ttd-4-col td { border: none !important; text-align: center; vertical-align: top; font-size: 11px; width: 25%; padding: 4px; }
+    .ttd-4-col { width: 100%; margin-top: 20px; border-collapse: collapse; }
+    .ttd-4-col td { border: none !important; text-align: center; vertical-align: top; font-size: 11px; width: 25%; padding: 4px; position: relative; }
     .ttd-space { height: 50px; }
 
-    .page-break { page-break-before: always; margin-top: 20px; }
+    .page-break { page-break-before: always; margin-top: 15px; }
 
-    /* Absensi Paraf Grid */
-    .paraf-box { font-size: 10px; height: 28px; vertical-align: middle; }
+    td.paraf-col { height: 26px; vertical-align: middle; padding-left: 6px; font-size: 10px; font-family: monospace; }
 
     .token-card { width: 48%; border: 1px dashed #333; padding: 10px; box-sizing: border-box; border-radius: 6px; margin-bottom: 10px; display: inline-block; vertical-align: top; }
     .token-card-header { font-weight: bold; font-size: 11px; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 4px; }
@@ -700,13 +730,14 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   <!-- ================= HALAMAN 1: BERITA ACARA ================= -->
   <table class="header-table">
     <tr>
-      <td style="width: 12%; text-align: left;">${logoPemdaHtml}</td>
-      <td style="width: 76%; text-align: center;" class="kop-title">
-        <h2>${kop.dinas}</h2>
-        <h1>${kop.namaSekolah}</h1>
-        <p>${kop.alamat} - ${kop.teleponWeb}</p>
+      <td style="width: 14%; text-align: left;">${logoPemdaHtml}</td>
+      <td style="width: 72%; text-align: center;" class="kop-title">
+        <h2>${kop.dinas || 'DINAS PENDIDIKAN DAN KEBUDAYAAN'}</h2>
+        <h1>${kop.namaSekolah || 'SMA NEGERI CONTOH'}</h1>
+        <p>${kop.alamat || ''}</p>
+        <p>${kop.teleponWeb || ''}</p>
       </td>
-      <td style="width: 12%; text-align: right;">${logoHtml}</td>
+      <td style="width: 14%; text-align: right;">${logoHtml}</td>
     </tr>
   </table>
 
@@ -714,7 +745,7 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   <div class="doc-subtitle">MATA PELAJARAN: ${config.mapel || 'SOSIOLOGI'} — TAHUN AJARAN 2025/2026</div>
 
   <p style="text-align: justify; margin-bottom: 8px;">
-    Pada hari ini <b>${new Date().toLocaleDateString('id-ID', { weekday: 'long' })}</b>, tanggal <b>${kop.kotaTanggal}</b>, telah dilaksanakan Ujian Berbasis Komputer (CBT) untuk Peserta Didik Aktif dengan rincian data sebagai berikut:
+    Pada hari ini <b>${new Date().toLocaleDateString('id-ID', { weekday: 'long' })}</b>, tanggal <b>${kop.kotaTanggal || new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</b>, telah dilaksanakan Ujian Berbasis Komputer (CBT) untuk Peserta Didik dengan rincian data sebagai berikut:
   </p>
 
   <table class="meta-box">
@@ -753,8 +784,8 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   </table>
 
   <!-- REKAPITULASI KEHADIRAN SISWA -->
-  <div style="font-weight: bold; margin-top: 10px; margin-bottom: 4px; font-size: 12px;">
-    I. REKAPITULASI PESERTA UJIAN AKTIF PER KELAS / RUANG:
+  <div style="font-weight: bold; margin-top: 10px; margin-bottom: 4px; font-size: 11px;">
+    I. REKAPITULASI PESERTA UJIAN PER KELAS / RUANG:
   </div>
 
   <table class="data-table">
@@ -816,14 +847,14 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   }
 
   <!-- CATATAN KEJADIAN KHUSUS -->
-  <div style="font-weight: bold; margin-top: 10px; margin-bottom: 4px; font-size: 12px;">
+  <div style="font-weight: bold; margin-top: 10px; margin-bottom: 4px; font-size: 11px;">
     II. CATATAN & KEJADIAN KHUSUS SELAMA UJIAN:
   </div>
   <div class="note-box">
     ${catatanKejadian || 'Ujian berjalan tertib, lancar, dan tanpa hambatan teknis.'}
   </div>
 
-  <p style="margin-top: 12px;">Demikian Berita Acara Pelaksanaan Ujian ini dibuat dengan sebenarnya untuk dipergunakan sebagaimana mestinya.</p>
+  <p style="margin-top: 10px;">Demikian Berita Acara Pelaksanaan Ujian ini dibuat dengan sebenarnya untuk dipergunakan sebagaimana mestinya.</p>
 
   <!-- TANDA TANGAN 4 PIHAK -->
   <table class="ttd-4-col">
@@ -846,10 +877,21 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
         <b><u>${kop.namaGuru}</u></b><br>
         NIP. ${kop.nipGuru}
       </td>
-      <td>
+      <td style="position: relative;">
         Mengetahui,<br>
         Kepala Sekolah<br>
-        <div class="ttd-space"></div>
+        <div style="height: 52px; position: relative; margin: 4px 0;">
+          ${
+            showDigitalSignatures && kop.ttdKepalaSekolah
+              ? `<img src="${kop.ttdKepalaSekolah}" style="max-height: 48px; position: absolute; left: 50%; transform: translateX(-50%); top: 2px; z-index: 2;" alt="TTD Kepsek" />`
+              : ''
+          }
+          ${
+            showDigitalSignatures && kop.stempelSekolah
+              ? `<img src="${kop.stempelSekolah}" style="max-height: 52px; position: absolute; left: 15%; top: -4px; opacity: ${kop.stempelOpacity || 0.85}; z-index: 1;" alt="Stempel" />`
+              : ''
+          }
+        </div>
         <b><u>${kop.namaKepalaSekolah}</u></b><br>
         NIP. ${kop.nipKepalaSekolah}
       </td>
@@ -864,51 +906,55 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
 
   <table class="header-table">
     <tr>
-      <td style="width: 12%; text-align: left;">${logoPemdaHtml}</td>
-      <td style="width: 76%; text-align: center;" class="kop-title">
-        <h2>${kop.dinas}</h2>
-        <h1>${kop.namaSekolah}</h1>
-        <p>${kop.alamat} - ${kop.teleponWeb}</p>
+      <td style="width: 14%; text-align: left;">${logoPemdaHtml}</td>
+      <td style="width: 72%; text-align: center;" class="kop-title">
+        <h2>${kop.dinas || 'DINAS PENDIDIKAN DAN KEBUDAYAAN'}</h2>
+        <h1>${kop.namaSekolah || 'SMA NEGERI CONTOH'}</h1>
+        <p>${kop.alamat || ''}</p>
+        <p>${kop.teleponWeb || ''}</p>
       </td>
-      <td style="width: 12%; text-align: right;">${logoHtml}</td>
+      <td style="width: 14%; text-align: right;">${logoHtml}</td>
     </tr>
   </table>
 
-  <div class="doc-title">DAFTAR HADIR PESERTA UJIAN AKTIF (CBT)</div>
+  <div class="doc-title">DAFTAR HADIR PESERTA UJIAN (CBT)</div>
   <div class="doc-subtitle">MATA PELAJARAN: ${config.mapel || 'SOSIOLOGI'} | KELAS: ${selectedKelasFilter === 'ALL' ? 'SEMUA KELAS' : selectedKelasFilter} | RUANG: ${ruangUjianInput}</div>
 
   <table class="data-table">
     <thead>
       <tr>
         <th style="width: 5%;">No</th>
-        <th style="width: 18%;">NIS / No. Peserta</th>
-        <th style="width: 37%;">Nama Lengkap Siswa</th>
-        <th style="width: 15%;">Kelas</th>
-        <th style="width: 10%;">Status</th>
-        <th style="width: 15%;">Tanda Tangan / Paraf</th>
+        <th style="width: 16%;">NIS / No. Peserta</th>
+        <th style="width: 33%;">Nama Lengkap Siswa</th>
+        <th style="width: 12%;">Kelas</th>
+        <th colspan="2" style="width: 34%;">Tanda Tangan</th>
       </tr>
     </thead>
     <tbody>
-      ${activeStudentsList
-        .map(
-          (st, idx) => `
+      ${fullStudentRows
+        .map((st, idx) => {
+          const rowNum = idx + 1;
+          const isOdd = rowNum % 2 !== 0;
+          return `
         <tr>
-          <td class="text-center">${idx + 1}</td>
+          <td class="text-center">${rowNum}</td>
           <td class="text-center font-bold" style="font-family: monospace;">${st.nis}</td>
           <td><b>${st.nama}</b></td>
           <td class="text-center">${st.kelas}</td>
-          <td class="text-center">${st.isActive !== false ? '<span class="badge-active">AKTIF</span>' : '<span class="badge-inactive">NON-AKTIF</span>'}</td>
-          <td class="paraf-box" style="padding-left: ${idx % 2 === 0 ? '6px' : '20px'};">
-            ${idx + 1}. ....................
+          <td class="paraf-col">
+            ${isOdd ? `<span style="font-weight: bold; margin-right: 4px;">${rowNum}.</span> ................................` : ''}
+          </td>
+          <td class="paraf-col">
+            ${!isOdd ? `<span style="font-weight: bold; margin-right: 4px;">${rowNum}.</span> ................................` : ''}
           </td>
         </tr>
-      `
-        )
+      `;
+        })
         .join('')}
     </tbody>
   </table>
 
-  <table class="ttd-4-col" style="margin-top: 20px;">
+  <table class="ttd-4-col" style="margin-top: 15px;">
     <tr>
       <td></td>
       <td>
@@ -921,7 +967,23 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
         <div class="ttd-space"></div>
         <b><u>${kop.namaGuru}</u></b>
       </td>
-      <td></td>
+      <td style="position: relative;">
+        Mengetahui,<br>
+        Kepala Sekolah<br>
+        <div style="height: 52px; position: relative; margin: 4px 0;">
+          ${
+            showDigitalSignatures && kop.ttdKepalaSekolah
+              ? `<img src="${kop.ttdKepalaSekolah}" style="max-height: 48px; position: absolute; left: 50%; transform: translateX(-50%); top: 2px; z-index: 2;" alt="TTD Kepsek" />`
+              : ''
+          }
+          ${
+            showDigitalSignatures && kop.stempelSekolah
+              ? `<img src="${kop.stempelSekolah}" style="max-height: 52px; position: absolute; left: 15%; top: -4px; opacity: ${kop.stempelOpacity || 0.85}; z-index: 1;" alt="Stempel" />`
+              : ''
+          }
+        </div>
+        <b><u>${kop.namaKepalaSekolah}</u></b>
+      </td>
     </tr>
   </table>
   `
@@ -961,8 +1023,10 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
 
   <script>
     window.onload = function() {
-      window.print();
-    }
+      setTimeout(function() {
+        window.print();
+      }, 500);
+    };
   </script>
 </body>
 </html>`;
@@ -1974,8 +2038,44 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                   />
                 </div>
 
-                {/* 8. Checkboxes Lampiran */}
-                <div className="md:col-span-2 flex flex-wrap gap-4 pt-1 border-t border-slate-200">
+                {/* 8. Target Jumlah Baris Presensi Per Kelas */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Target Baris Presensi Per Kelas
+                  </label>
+                  <select
+                    value={targetRowsPerClass}
+                    onChange={(e) => setTargetRowsPerClass(Number(e.target.value))}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value={36}>36 Baris (Standar Ujian / Kelas)</option>
+                    <option value={30}>30 Baris</option>
+                    <option value={40}>40 Baris</option>
+                    <option value={0}>Sesuai Jumlah Siswa Aktif</option>
+                  </select>
+                </div>
+
+                {/* 9. Ukuran Kertas Dokumen */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Ukuran Kertas Cetak
+                  </label>
+                  <select
+                    value={selectedPaperSize}
+                    onChange={(e) =>
+                      setSelectedPaperSize(e.target.value as 'a4' | 'f4' | 'letter' | 'legal')
+                    }
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="a4">A4 (210 x 297 mm)</option>
+                    <option value="f4">F4 / Folio (210 x 330 mm)</option>
+                    <option value="letter">Letter</option>
+                    <option value="legal">Legal</option>
+                  </select>
+                </div>
+
+                {/* 10. Checkboxes Lampiran & TTD / Stempel Digital */}
+                <div className="md:col-span-2 flex flex-wrap gap-4 pt-2 border-t border-slate-200">
                   <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
@@ -1984,6 +2084,15 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                       className="w-4 h-4 text-blue-600 rounded"
                     />
                     <span>Sertakan Lampiran Presensi / Daftar Hadir Siswa (Lengkap Paraf)</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showDigitalSignatures}
+                      onChange={(e) => setShowDigitalSignatures(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span>Tampilkan TTD Digital Kepala Sekolah & Stempel Digital Resmi</span>
                   </label>
                   <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
                     <input
