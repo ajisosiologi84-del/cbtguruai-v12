@@ -398,22 +398,45 @@ export const TestView: React.FC<TestViewProps> = ({
               </span>
             </div>
 
-            {/* Question Image / Diagram / Table if present */}
-            {currentQuestion?.image && (
-              <div className="mb-5 flex justify-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-                <img
-                  src={currentQuestion.image}
-                  alt="Lampiran Soal"
-                  className="max-h-72 sm:max-h-96 w-auto object-contain rounded-xl border border-slate-100"
-                />
-              </div>
-            )}
+            {/* Question Image & Text Layout based on imagePosition */}
+            {(() => {
+              const imgPos = currentQuestion?.imagePosition || 'top';
+              const qImages = currentQuestion?.images && Array.isArray(currentQuestion.images) && currentQuestion.images.length > 0
+                ? currentQuestion.images.filter(Boolean)
+                : (currentQuestion?.image?.trim() ? [currentQuestion.image.trim()] : []);
 
-            {/* Question Text */}
-            <div
-              className="text-sm sm:text-base md:text-lg text-gray-800 mb-6 leading-relaxed font-medium overflow-x-auto"
-              dangerouslySetInnerHTML={{ __html: formatQuestionText(currentQuestion?.question) }}
-            />
+              const hasImg = qImages.length > 0;
+
+              const renderImageBlock = () => (
+                <div className={`my-4 grid gap-3 ${qImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                  {qImages.map((imgSrc, idx) => (
+                    <div key={idx} className="flex justify-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+                      <img
+                        src={imgSrc}
+                        alt={`Lampiran Soal #${idx + 1}`}
+                        className="max-h-72 sm:max-h-96 w-auto object-contain rounded-xl border border-slate-100"
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+
+              return (
+                <div className="mb-6 space-y-4">
+                  {/* Gambar Di Atas Teks */}
+                  {hasImg && imgPos === 'top' && renderImageBlock()}
+
+                  {/* Teks Pertanyaan */}
+                  <div
+                    className="text-sm sm:text-base md:text-lg text-gray-800 leading-relaxed font-medium overflow-x-auto"
+                    dangerouslySetInnerHTML={{ __html: formatQuestionText(currentQuestion?.question) }}
+                  />
+
+                  {/* Gambar Di Tengah / Di Bawah Teks */}
+                  {hasImg && (imgPos === 'middle' || imgPos === 'bottom') && renderImageBlock()}
+                </div>
+              );
+            })()}
 
             {/* Answer Options according to Question Type */}
             {(() => {
@@ -579,24 +602,35 @@ export const TestView: React.FC<TestViewProps> = ({
                           onClick={() => handleToggleMcma(opt.id)}
                         >
                           <div
-                            className={`p-3 sm:p-4 border-2 rounded-2xl transition-all flex gap-3 sm:gap-4 items-start ${
+                            className={`p-3 sm:p-4 border-2 rounded-2xl transition-all flex flex-col gap-2 ${
                               isSelected
                                 ? 'border-purple-600 bg-purple-50/70 shadow-xs'
                                 : 'border-gray-200 hover:border-purple-300 bg-white'
                             }`}
                           >
-                            <div
-                              className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg border-2 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 transition-colors ${
-                                isSelected
-                                  ? 'bg-purple-600 border-purple-600 text-white'
-                                  : 'border-gray-300 text-gray-500 group-hover:border-purple-400'
-                              }`}
-                            >
-                              {isSelected ? '✓' : opt.id}
+                            <div className="flex gap-3 sm:gap-4 items-start">
+                              <div
+                                className={`w-6 h-6 sm:w-7 sm:h-7 rounded-lg border-2 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 transition-colors ${
+                                  isSelected
+                                    ? 'bg-purple-600 border-purple-600 text-white'
+                                    : 'border-gray-300 text-gray-500 group-hover:border-purple-400'
+                                }`}
+                              >
+                                {isSelected ? '✓' : opt.id}
+                              </div>
+                              <div className="text-gray-800 text-xs sm:text-base font-medium leading-relaxed pt-0.5 flex-1">
+                                {opt.text}
+                              </div>
                             </div>
-                            <div className="text-gray-800 text-xs sm:text-base font-medium leading-relaxed pt-0.5">
-                              {opt.text}
-                            </div>
+                            {opt.image && (
+                              <div className="ml-9 sm:ml-11 mt-1">
+                                <img
+                                  src={opt.image}
+                                  alt={`Gambar Opsi ${opt.id}`}
+                                  className="max-h-48 sm:max-h-60 w-auto object-contain rounded-xl border border-slate-200 bg-white p-1"
+                                />
+                              </div>
+                            )}
                           </div>
                         </label>
                       );
@@ -617,24 +651,35 @@ export const TestView: React.FC<TestViewProps> = ({
                         onClick={() => onAnswer(opt.id)}
                       >
                         <div
-                          className={`p-3 sm:p-4 border-2 rounded-2xl transition-all flex gap-3 sm:gap-4 items-start ${
+                          className={`p-3 sm:p-4 border-2 rounded-2xl transition-all flex flex-col gap-2 ${
                             isSelected
                               ? 'border-blue-600 bg-blue-50/70 shadow-xs'
                               : 'border-gray-200 hover:border-blue-300 bg-white'
                           }`}
                         >
-                          <div
-                            className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 transition-colors ${
-                              isSelected
-                                ? 'bg-blue-600 border-blue-600 text-white'
-                                : 'border-gray-300 text-gray-500 group-hover:border-blue-400'
-                            }`}
-                          >
-                            {opt.id}
+                          <div className="flex gap-3 sm:gap-4 items-start">
+                            <div
+                              className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full border-2 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5 transition-colors ${
+                                isSelected
+                                  ? 'bg-blue-600 border-blue-600 text-white'
+                                  : 'border-gray-300 text-gray-500 group-hover:border-blue-400'
+                              }`}
+                            >
+                              {opt.id}
+                            </div>
+                            <div className="text-gray-800 text-xs sm:text-base font-medium leading-relaxed pt-0.5 flex-1">
+                              {opt.text}
+                            </div>
                           </div>
-                          <div className="text-gray-800 text-xs sm:text-base font-medium leading-relaxed pt-0.5">
-                            {opt.text}
-                          </div>
+                          {opt.image && (
+                            <div className="ml-9 sm:ml-11 mt-1">
+                              <img
+                                src={opt.image}
+                                alt={`Gambar Opsi ${opt.id}`}
+                                className="max-h-48 sm:max-h-60 w-auto object-contain rounded-xl border border-slate-200 bg-white p-1"
+                              />
+                            </div>
+                          )}
                         </div>
                       </label>
                     );

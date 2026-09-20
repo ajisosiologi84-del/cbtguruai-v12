@@ -299,6 +299,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [driveUploadUrlInput, setDriveUploadUrlInput] = useState<string>(
     config.driveUploadUrl || ''
   );
+  const [driveDownloadUrlInput, setDriveDownloadUrlInput] = useState<string>(
+    config.driveDownloadUrl || ''
+  );
   const [youtubeGuideUrlInput, setYoutubeGuideUrlInput] = useState<string>(
     config.youtubeGuideUrl || ''
   );
@@ -584,6 +587,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (config.mapelTitle) setMapelTitleInput(config.mapelTitle);
       if (config.subTitle) setSubTitleInput(config.subTitle);
       if (config.driveUploadUrl !== undefined) setDriveUploadUrlInput(config.driveUploadUrl || '');
+      if (config.driveDownloadUrl !== undefined) setDriveDownloadUrlInput(config.driveDownloadUrl || '');
       if (config.youtubeGuideUrl !== undefined) setYoutubeGuideUrlInput(config.youtubeGuideUrl || '');
       if (config.mapelList && config.mapelList.length > 0) setMapelList(config.mapelList);
       if (config.examSchedule) {
@@ -1238,6 +1242,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       subTitle: finalSubTitle,
       kodeGuru: kodeGuruInput.trim().toUpperCase() || 'GURU01',
       driveUploadUrl: driveUploadUrlInput.trim(),
+      driveDownloadUrl: driveDownloadUrlInput.trim(),
       youtubeGuideUrl: youtubeGuideUrlInput.trim(),
       mapelList: updatedList,
     });
@@ -4851,6 +4856,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     <div>
                       <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center justify-between">
+                        <span>Link Download Google Drive (File Paket Soal .json)</span>
+                        <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-black">Paket Ujian</span>
+                      </label>
+                      <input
+                        type="url"
+                        value={driveDownloadUrlInput}
+                        onChange={(e) => setDriveDownloadUrlInput(e.target.value)}
+                        placeholder="Contoh: https://drive.google.com/file/d/.../view atau link folder paket .json"
+                        className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-xl px-3.5 py-2.5 font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                      />
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Link Tautan Google Drive tempat penyimpanan file Paket Soal (.json). Siswa/Proktor dapat langsung mengeklik link ini di Halaman Login untuk mengunduh paket.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5 flex items-center justify-between">
                         <span className="flex items-center gap-1.5 text-red-700 font-extrabold">
                           <Youtube className="w-4 h-4 text-red-600 fill-current" />
                           Link Video YouTube (Panduan Guru)
@@ -5127,12 +5149,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <Upload className="w-4 h-4" /> Upload Excel Soal
                 </button>
 
-                <button
-                  onClick={() => onOpenQuestionModal(null)}
-                  className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95"
-                >
-                  <Plus className="w-4 h-4" /> Tambah Soal
-                </button>
+                <div className="relative inline-flex items-center">
+                  <span className="absolute -top-3.5 -right-2 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-bounce shadow-md z-10 border border-white flex items-center gap-1">
+                    ✨ FITUR BARU!
+                  </span>
+                  <button
+                    onClick={() => onOpenQuestionModal(null)}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 ring-2 ring-amber-400/80 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4 text-amber-400" /> Tambah / Edit Soal
+                  </button>
+                </div>
 
                 <button
                   onClick={handleDeleteAllQuestions}
@@ -5394,11 +5421,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 Guru: {q.kodeGuru}
                               </span>
                             )}
-                            {q.image && (
-                              <span className="bg-pink-100 text-pink-800 text-[10px] font-bold px-2.5 py-0.5 rounded-md border border-pink-200/80 flex items-center gap-1">
-                                <ImageIcon className="w-3 h-3 text-pink-600" /> Gambar/Tabel
-                              </span>
-                            )}
+                            {(() => {
+                              const qImgs = q.images && Array.isArray(q.images) && q.images.length > 0
+                                ? q.images.filter(Boolean)
+                                : (q.image?.trim() ? [q.image.trim()] : []);
+                              if (qImgs.length === 0) return null;
+                              return (
+                                <span className="bg-pink-100 text-pink-800 text-[10px] font-bold px-2.5 py-0.5 rounded-md border border-pink-200/80 flex items-center gap-1">
+                                  <ImageIcon className="w-3 h-3 text-pink-600" /> {qImgs.length > 1 ? `${qImgs.length} Gambar/Tabel` : 'Gambar/Tabel'}
+                                </span>
+                              );
+                            })()}
                             <span className="text-[11px] font-mono text-gray-400">ID: {q.id}</span>
 
                             {/* Active Toggle Status Badge */}
@@ -5423,15 +5456,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </button>
                           </div>
                           <p className="text-sm text-gray-800 font-medium leading-relaxed">{previewText}</p>
-                          {q.image && (
-                            <div className="mt-2">
-                              <img
-                                src={q.image}
-                                alt="Gambar Soal"
-                                className="max-h-24 w-auto object-contain rounded-lg border border-slate-200 bg-slate-50 p-1"
-                              />
-                            </div>
-                          )}
+                          {(() => {
+                            const qImgs = q.images && Array.isArray(q.images) && q.images.length > 0
+                              ? q.images.filter(Boolean)
+                              : (q.image?.trim() ? [q.image.trim()] : []);
+                            if (qImgs.length === 0) return null;
+                            return (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {qImgs.map((imgSrc, i) => (
+                                  <img
+                                    key={i}
+                                    src={imgSrc}
+                                    alt={`Gambar Soal #${i + 1}`}
+                                    className="max-h-24 w-auto object-contain rounded-lg border border-slate-200 bg-slate-50 p-1"
+                                  />
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -10036,6 +10078,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         teachers={teachersList}
         kopSekolah={config.kopSekolah}
         currentExamToken={activeTeacherObj?.examToken || config.examToken || 'CBT2026'}
+        onSaveKopSekolah={(updatedKop) => {
+          setKopForm(updatedKop);
+          const targetKg = loggedInTeacher?.kodeGuru || (selectedGuruFilter !== 'ALL' ? selectedGuruFilter : (config.kodeGuru || 'GURU01'));
+          const existingTConfig = config.teacherConfigs?.[targetKg] || { kodeGuru: targetKg };
+          onSaveConfig({
+            ...config,
+            kopSekolah: updatedKop,
+            teacherConfigs: {
+              ...(config.teacherConfigs || {}),
+              [targetKg]: {
+                ...existingTConfig,
+                kopSekolah: updatedKop,
+              },
+            },
+          });
+        }}
       />
 
       {/* MODAL: MONITORING REAL-TIME PROGRES UJIAN SISWA PER KELAS */}

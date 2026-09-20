@@ -14,6 +14,8 @@ interface QuestionEditorModalProps {
     options: Option[];
     explanation: string;
     image?: string;
+    images?: string[];
+    imagePosition?: 'top' | 'middle' | 'bottom';
     mapel?: string;
     kompetensi?: string;
     subTopik?: string;
@@ -46,10 +48,12 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
   const [bentukSoalText, setBentukSoalText] = useState<string>('Pilihan Ganda');
   const [kodeGuruText, setKodeGuruText] = useState<string>(defaultKodeGuru);
   const [poinVal, setPoinVal] = useState<number>(10);
-  const [imageString, setImageString] = useState<string>('');
+  const [questionImages, setQuestionImages] = useState<string[]>([]);
+  const [imagePosition, setImagePosition] = useState<'top' | 'middle' | 'bottom'>('top');
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [imageUrlInput, setImageUrlInput] = useState('');
   const [optionsText, setOptionsText] = useState<string[]>(['', '', '', '', '']);
+  const [optionImages, setOptionImages] = useState<string[]>(['', '', '', '', '']);
   const [correctIndex, setCorrectIndex] = useState<number>(0);
   const [mcmaCorrectIndices, setMcmaCorrectIndices] = useState<number[]>([0]);
   const [categoryOptionsList, setCategoryOptionsList] = useState<string[]>(['Benar', 'Salah']);
@@ -75,14 +79,28 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
       setBentukSoalText(bentuk);
       setKodeGuruText(editingQuestion.kodeGuru || defaultKodeGuru || 'GURU01');
       setPoinVal(typeof editingQuestion.poin === 'number' && editingQuestion.poin > 0 ? editingQuestion.poin : 10);
-      setImageString(editingQuestion.image || '');
-      setImageUrlInput(editingQuestion.image && !editingQuestion.image.startsWith('data:') ? editingQuestion.image : '');
+      
+      let imgs: string[] = [];
+      if (editingQuestion.images && Array.isArray(editingQuestion.images) && editingQuestion.images.length > 0) {
+        imgs = editingQuestion.images.filter((img) => typeof img === 'string' && img.trim() !== '');
+      } else if (editingQuestion.image && editingQuestion.image.trim()) {
+        imgs = [editingQuestion.image.trim()];
+      }
+      setQuestionImages(imgs);
+      setImagePosition(editingQuestion.imagePosition || 'top');
+      setImageUrlInput('');
 
       const optTexts = labels.map((label, idx) => {
         const found = editingQuestion.options?.find(o => o.id === label) || editingQuestion.options?.[idx];
         return found ? found.text : '';
       });
       setOptionsText(optTexts);
+
+      const optImgs = labels.map((label, idx) => {
+        const found = editingQuestion.options?.find(o => o.id === label) || editingQuestion.options?.[idx];
+        return found?.image || '';
+      });
+      setOptionImages(optImgs);
 
       const correctIndices = (editingQuestion.options || [])
         .map((o, idx) => (o.isCorrect ? idx : -1))
@@ -114,9 +132,11 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
       setBentukSoalText('Pilihan Ganda');
       setKodeGuruText(defaultKodeGuru || 'GURU01');
       setPoinVal(10);
-      setImageString('');
+      setQuestionImages([]);
+      setImagePosition('top');
       setImageUrlInput('');
       setOptionsText(['', '', '', '', '']);
+      setOptionImages(['', '', '', '', '']);
       setCorrectIndex(0);
       setMcmaCorrectIndices([0]);
       setCategoryOptionsList(['Benar', 'Salah']);
@@ -159,61 +179,107 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
     setCategoryStatementsList((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleMultipleImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
 
-    if (!file.type.startsWith('image/')) {
-      showAlert('Format file harus berupa gambar (JPG, PNG, GIF, WEBP)!');
-      return;
-    }
-
-    if (file.size > 8 * 1024 * 1024) {
-      showAlert('Ukuran file gambar terlalu besar (Maksimal 8 MB)!');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const rawResult = event.target?.result as string;
-      if (rawResult) {
-        // Compress and resize image using HTML5 canvas
-        const img = new Image();
-        img.onload = () => {
-          const maxDim = 900;
-          let width = img.width;
-          let height = img.height;
-          if (width > maxDim || height > maxDim) {
-            if (width > height) {
-              height = Math.round((height * maxDim) / width);
-              width = maxDim;
-            } else {
-              width = Math.round((width * maxDim) / height);
-              height = maxDim;
-            }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, width, height);
-            const compressed = canvas.toDataURL('image/jpeg', 0.82);
-            setImageString(compressed);
-          } else {
-            setImageString(rawResult);
-          }
-          showAlert('Gambar/tabel berhasil diunggah!');
-        };
-        img.onerror = () => {
-          setImageString(rawResult);
-          showAlert('Gambar/tabel berhasil diunggah!');
-        };
-        img.src = rawResult;
+    const validFiles: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) {
+        showAlert(`File ${file.name} bukan format gambar!`);
+        continue;
       }
-    };
-    reader.readAsDataURL(file);
+      if (file.size > 8 * 1024 * 1024) {
+        showAlert(`Ukuran gambar ${file.name} terlalu besar (> 8 MB)!`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) return;
+
+    let processedCount = 0;
+    const newCompressedList: string[] = [];
+
+    validFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const rawResult = event.target?.result as string;
+        if (rawResult) {
+          const img = new Image();
+          img.onload = () => {
+            const maxDim = 900;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressed = canvas.toDataURL('image/jpeg', 0.82);
+              newCompressedList.push(compressed);
+            } else {
+              newCompressedList.push(rawResult);
+            }
+            processedCount++;
+            if (processedCount === validFiles.length) {
+              setQuestionImages((prev) => [...prev, ...newCompressedList]);
+              showAlert(`${validFiles.length} gambar/tabel berhasil diunggah!`);
+            }
+          };
+          img.onerror = () => {
+            newCompressedList.push(rawResult);
+            processedCount++;
+            if (processedCount === validFiles.length) {
+              setQuestionImages((prev) => [...prev, ...newCompressedList]);
+              showAlert(`${validFiles.length} gambar/tabel berhasil diunggah!`);
+            }
+          };
+          img.src = rawResult;
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
     e.target.value = '';
+  };
+
+  const handleRemoveQuestionImage = (index: number) => {
+    setQuestionImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMoveQuestionImage = (index: number, direction: 'left' | 'right') => {
+    setQuestionImages((prev) => {
+      const list = [...prev];
+      const targetIdx = direction === 'left' ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= list.length) return prev;
+      const temp = list[index];
+      list[index] = list[targetIdx];
+      list[targetIdx] = temp;
+      return list;
+    });
+  };
+
+  const handleApplyQuestionImageUrl = () => {
+    if (!imageUrlInput.trim()) {
+      showAlert('Masukkan URL gambar yang valid!');
+      return;
+    }
+    setQuestionImages((prev) => [...prev, imageUrlInput.trim()]);
+    setImageUrlInput('');
+    setShowUrlInput(false);
+    showAlert('URL gambar ditambahkan!');
   };
 
   const handleInsertTableTemplate = () => {
@@ -245,14 +311,80 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
     showAlert('Format Tabel HTML berhasil disisipkan ke dalam teks pertanyaan!');
   };
 
-  const handleApplyUrl = () => {
-    if (!imageUrlInput.trim()) {
-      showAlert('Masukkan URL gambar yang valid!');
+  const handleOptionImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showAlert('Format file harus berupa gambar (JPG, PNG, GIF, WEBP)!');
       return;
     }
-    setImageString(imageUrlInput.trim());
-    setShowUrlInput(false);
-    showAlert('URL gambar diterapkan!');
+
+    if (file.size > 5 * 1024 * 1024) {
+      showAlert('Ukuran file gambar opsi terlalu besar (Maksimal 5 MB)!');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const rawResult = event.target?.result as string;
+      if (rawResult) {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 600;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.82);
+            setOptionImages((prev) => {
+              const updated = [...prev];
+              updated[index] = compressed;
+              return updated;
+            });
+          } else {
+            setOptionImages((prev) => {
+              const updated = [...prev];
+              updated[index] = rawResult;
+              return updated;
+            });
+          }
+          showAlert(`Gambar untuk Pilihan ${labels[index]} berhasil diunggah!`);
+        };
+        img.onerror = () => {
+          setOptionImages((prev) => {
+            const updated = [...prev];
+            updated[index] = rawResult;
+            return updated;
+          });
+          showAlert(`Gambar untuk Pilihan ${labels[index]} berhasil diunggah!`);
+        };
+        img.src = rawResult;
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleRemoveOptionImage = (index: number) => {
+    setOptionImages((prev) => {
+      const updated = [...prev];
+      updated[index] = '';
+      return updated;
+    });
   };
 
   const handleSave = () => {
@@ -282,7 +414,9 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
         question: formatQuestionText(trimmedQuestion),
         options: [],
         explanation: explanationText.trim() || 'Tidak ada pembahasan.',
-        image: imageString.trim() || undefined,
+        image: questionImages.length > 0 ? questionImages[0] : undefined,
+        images: questionImages.length > 0 ? questionImages : undefined,
+        imagePosition: questionImages.length > 0 ? imagePosition : undefined,
         mapel: selectedMapel,
         kompetensi: kompetensiText.trim() || subTopikText.trim() || undefined,
         subTopik: subTopikText.trim() || kompetensiText.trim() || undefined,
@@ -318,6 +452,7 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
       id: label,
       text: optionsText[i].trim(),
       isCorrect: isMcma ? mcmaCorrectIndices.includes(i) : i === correctIndex,
+      image: optionImages[i]?.trim() || undefined,
     }));
 
     onSave({
@@ -325,7 +460,9 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
       question: formatQuestionText(trimmedQuestion),
       options,
       explanation: explanationText.trim() || 'Tidak ada pembahasan.',
-      image: imageString.trim() || undefined,
+      image: questionImages.length > 0 ? questionImages[0] : undefined,
+      images: questionImages.length > 0 ? questionImages : undefined,
+      imagePosition: questionImages.length > 0 ? imagePosition : undefined,
       mapel: selectedMapel,
       kompetensi: kompetensiText.trim() || subTopikText.trim() || undefined,
       subTopik: subTopikText.trim() || kompetensiText.trim() || undefined,
@@ -381,6 +518,23 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
 
         {activeTab === 'editor' ? (
           <div className="p-6 overflow-y-auto flex-1 space-y-5 custom-scrollbar">
+            {/* BANNER ANIMASI HIGHLIGHT FITUR BARU */}
+            <div className="bg-gradient-to-r from-amber-500 via-sky-600 to-purple-600 p-0.5 rounded-2xl shadow-sm animate-pulse">
+              <div className="bg-amber-50/90 p-3.5 rounded-[14px] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs border border-amber-200">
+                <div className="flex items-center gap-2.5">
+                  <span className="bg-gradient-to-r from-amber-500 to-orange-600 text-white font-black text-[10px] px-2.5 py-1 rounded-full shadow-xs flex items-center gap-1 animate-bounce">
+                    <Sparkles className="w-3.5 h-3.5" /> FITUR BARU!
+                  </span>
+                  <p className="font-extrabold text-slate-900 leading-snug">
+                    1️⃣ Posisi Gambar Soal (Atas / Tengah / Bawah) &nbsp;•&nbsp; 2️⃣ Gambar per Opsi Jawaban (A, B, C, D, E)
+                  </p>
+                </div>
+                <span className="text-[10px] font-black uppercase text-amber-900 bg-amber-200/80 px-2.5 py-1 rounded-lg border border-amber-300 shrink-0">
+                  ✨ LOKASI BERBAHAN BADGE "BARU"
+                </span>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
               {/* 1. Mata Pelajaran */}
               <div>
@@ -490,33 +644,138 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
               />
             </div>
 
-            {/* MENU TAMBAH GAMBAR / TABEL (JPG/PNG) */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
-              <div className="flex justify-between items-center">
-                <label className="font-bold text-gray-800 text-sm flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4 text-sky-600" /> Lampiran Gambar / Tabel / Diagram Soal (JPG / PNG)
+            {/* MENU TAMBAH GAMBAR / TABEL (BISA MULTIPLE GAMBAR) */}
+            <div className="bg-slate-50 p-4 rounded-xl border-2 border-sky-200/80 space-y-3 relative shadow-xs">
+              <div className="flex flex-wrap justify-between items-center gap-2">
+                <label className="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4 text-sky-600" /> Lampiran Gambar / Tabel / Diagram Soal
+                  <span className="bg-amber-400 text-amber-950 font-black text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wider animate-pulse flex items-center gap-1 shadow-2xs">
+                    ✨ BISA MULTIPLE GAMBAR ({questionImages.length})
+                  </span>
                 </label>
-                {imageString && (
+                {questionImages.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => setImageString('')}
+                    onClick={() => setQuestionImages([])}
                     className="text-xs font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-2.5 py-1 rounded-lg flex items-center gap-1 border border-red-200 transition-all cursor-pointer"
                   >
-                    <Trash2 className="w-3.5 h-3.5" /> Hapus Gambar
+                    <Trash2 className="w-3.5 h-3.5" /> Hapus Semua Gambar
                   </button>
                 )}
               </div>
 
-              {imageString ? (
-                <div className="relative group bg-white p-3 rounded-xl border border-slate-200 flex flex-col items-center">
-                  <img
-                    src={imageString}
-                    alt="Lampiran Soal"
-                    className="max-h-56 w-auto object-contain rounded-lg border border-slate-100 shadow-xs mb-2"
-                  />
-                  <span className="text-[11px] text-slate-500 font-semibold">
-                    ✓ Gambar terlampir dan akan ditampilkan pada soal
-                  </span>
+              {questionImages.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Grid Gambar Soal */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {questionImages.map((imgSrc, idx) => (
+                      <div
+                        key={idx}
+                        className="relative bg-white p-2.5 rounded-xl border-2 border-sky-200 flex flex-col items-center justify-between group shadow-xs"
+                      >
+                        <div className="w-full flex justify-between items-center mb-1 text-[11px] font-bold text-slate-500">
+                          <span className="bg-sky-100 text-sky-900 px-2 py-0.5 rounded-md font-mono text-[10px]">
+                            Gambar #{idx + 1}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            {idx > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveQuestionImage(idx, 'left')}
+                                className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-slate-700 font-bold text-xs"
+                                title="Geser Kiri"
+                              >
+                                ←
+                              </button>
+                            )}
+                            {idx < questionImages.length - 1 && (
+                              <button
+                                type="button"
+                                onClick={() => handleMoveQuestionImage(idx, 'right')}
+                                className="px-1.5 py-0.5 hover:bg-slate-100 rounded text-slate-700 font-bold text-xs"
+                                title="Geser Kanan"
+                              >
+                                →
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveQuestionImage(idx)}
+                              className="p-1 hover:bg-red-100 text-red-600 rounded transition-colors"
+                              title="Hapus Gambar Ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <img
+                          src={imgSrc}
+                          alt={`Lampiran Soal #${idx + 1}`}
+                          className="max-h-36 w-auto object-contain rounded-lg border border-slate-100 bg-slate-50 p-1"
+                        />
+                      </div>
+                    ))}
+
+                    {/* Tombol Tambah Gambar Lagi */}
+                    <label className="border-2 border-dashed border-sky-300 hover:border-sky-500 bg-white hover:bg-sky-50/50 transition-all rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer min-h-[120px] text-sky-700 font-bold text-xs gap-1.5 shadow-2xs">
+                      <input
+                        type="file"
+                        accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
+                        multiple
+                        onChange={handleMultipleImagesUpload}
+                        className="hidden"
+                      />
+                      <PlusCircle className="w-6 h-6 text-sky-600" />
+                      <span>+ Tambah Gambar Lain</span>
+                      <span className="text-[10px] text-slate-400 font-normal">Pilih 1 atau beberapa file</span>
+                    </label>
+                  </div>
+
+                  {/* PILIHAN POSISI GAMBAR SOAL */}
+                  <div className="w-full pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900">Posisi Letak Gambar Soal:</span>
+                      <span className="bg-sky-100 text-sky-900 font-extrabold text-[10px] px-2 py-0.5 rounded-md border border-sky-300">
+                        ✨ Berlaku untuk semua {questionImages.length} gambar
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5 bg-slate-100 p-1.5 rounded-xl border border-slate-300 shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setImagePosition('top')}
+                        className={`px-3 py-1.5 rounded-lg font-black text-xs transition-all cursor-pointer ${
+                          imagePosition === 'top'
+                            ? 'bg-sky-600 text-white shadow-sm ring-2 ring-sky-300'
+                            : 'text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        Di Atas Teks
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImagePosition('middle')}
+                        className={`px-3 py-1.5 rounded-lg font-black text-xs transition-all cursor-pointer ${
+                          imagePosition === 'middle'
+                            ? 'bg-sky-600 text-white shadow-sm ring-2 ring-sky-300'
+                            : 'text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        Di Tengah Teks
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setImagePosition('bottom')}
+                        className={`px-3 py-1.5 rounded-lg font-black text-xs transition-all cursor-pointer ${
+                          imagePosition === 'bottom'
+                            ? 'bg-sky-600 text-white shadow-sm ring-2 ring-sky-300'
+                            : 'text-slate-700 hover:bg-slate-200'
+                        }`}
+                      >
+                        Di Bawah Teks
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -524,7 +783,8 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
                     <input
                       type="file"
                       accept="image/png, image/jpeg, image/jpg, image/webp, image/gif"
-                      onChange={handleImageUpload}
+                      multiple
+                      onChange={handleMultipleImagesUpload}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
                     <div className="flex flex-col items-center justify-center gap-1.5 text-slate-600">
@@ -532,10 +792,10 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
                         <Upload className="w-5 h-5" />
                       </div>
                       <p className="font-bold text-xs text-slate-800">
-                        Klik atau Drag & Drop Gambar / Tabel di sini
+                        Klik atau Drag & Drop Gambar / Tabel di sini (Bisa pilih sekaligus banyak)
                       </p>
                       <p className="text-[11px] text-slate-400">
-                        Mendukung format <b>JPG, PNG, WEBP, GIF</b> (Maksimal 8 MB)
+                        Mendukung format <b>JPG, PNG, WEBP, GIF</b> (Maksimal 8 MB per file)
                       </p>
                     </div>
                   </div>
@@ -546,7 +806,7 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
                       onClick={() => setShowUrlInput(!showUrlInput)}
                       className="text-sky-600 hover:text-sky-800 font-bold flex items-center gap-1 cursor-pointer"
                     >
-                      <LinkIcon className="w-3.5 h-3.5" /> {showUrlInput ? 'Sembunyikan Input URL' : 'Atau gunakan URL Link Gambar'}
+                      <LinkIcon className="w-3.5 h-3.5" /> {showUrlInput ? 'Sembunyikan Input URL' : 'Atau tambah via URL Link Gambar'}
                     </button>
                   </div>
 
@@ -561,10 +821,10 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
                       />
                       <button
                         type="button"
-                        onClick={handleApplyUrl}
+                        onClick={handleApplyQuestionImageUrl}
                         className="bg-sky-600 hover:bg-sky-700 text-white font-bold px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer"
                       >
-                        Terapkan
+                        Tambah Gambar
                       </button>
                     </div>
                   )}
@@ -686,40 +946,78 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-purple-700 font-medium">
-                  Siswa dapat memilih lebih dari satu jawaban benar. Tandai <b className="text-purple-900">☑️ Checkbox</b> pada setiap opsi yang bernilai benar.
+                  Siswa dapat memilih lebih dari satu jawaban benar. Anda juga dapat melampirkan gambar untuk setiap opsi jawaban.
                 </p>
 
                 <div className="space-y-3">
                   {labels.map((label, idx) => {
                     const isChecked = mcmaCorrectIndices.includes(idx);
+                    const optImg = optionImages[idx];
                     return (
-                      <div key={label} className="flex items-start gap-3">
-                        <div className="mt-2.5 flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => handleToggleMcmaIndex(idx)}
-                            className="w-5 h-5 cursor-pointer text-purple-600 rounded-md focus:ring-purple-500"
-                          />
-                        </div>
-                        <div className="flex-1 relative">
-                          <div className="absolute left-3 top-2.5 font-bold text-gray-400 text-sm">
-                            {label}.
+                      <div key={label} className="bg-white p-3 rounded-2xl border-2 border-purple-100 shadow-2xs space-y-2">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-2.5 flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => handleToggleMcmaIndex(idx)}
+                              className="w-5 h-5 cursor-pointer text-purple-600 rounded-md focus:ring-purple-500"
+                            />
                           </div>
-                          <input
-                            type="text"
-                            value={optionsText[idx]}
-                            onChange={(e) => {
-                              const newOpts = [...optionsText];
-                              newOpts[idx] = e.target.value;
-                              setOptionsText(newOpts);
-                            }}
-                            className={`w-full border-2 rounded-xl py-2 pl-9 pr-3 focus:outline-none text-sm bg-white ${
-                              isChecked ? 'border-purple-400 font-bold bg-purple-50/30' : 'border-gray-200'
-                            }`}
-                            placeholder={`Masukkan pilihan ${label}`}
-                          />
+                          <div className="flex-1 relative">
+                            <div className="absolute left-3 top-2.5 font-bold text-gray-400 text-sm">
+                              {label}.
+                            </div>
+                            <input
+                              type="text"
+                              value={optionsText[idx]}
+                              onChange={(e) => {
+                                const newOpts = [...optionsText];
+                                newOpts[idx] = e.target.value;
+                                setOptionsText(newOpts);
+                              }}
+                              className={`w-full border-2 rounded-xl py-2 pl-9 pr-3 focus:outline-none text-sm bg-white ${
+                                isChecked ? 'border-purple-400 font-bold bg-purple-50/30' : 'border-gray-200'
+                              }`}
+                              placeholder={`Masukkan teks pilihan ${label}`}
+                            />
+                          </div>
+                          {/* Tombol Upload Gambar Opsi */}
+                          <label className="mt-1 relative cursor-pointer inline-flex items-center gap-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-xs font-black px-3 py-2 rounded-xl transition-all shadow-xs shrink-0 active:scale-95 animate-pulse">
+                            <FileImage className="w-4 h-4 text-amber-300" />
+                            <span>Gambar Opsi</span>
+                            <span className="bg-amber-400 text-slate-900 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider">✨ BARU</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleOptionImageUpload(idx, e)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                          </label>
                         </div>
+
+                        {/* Preview Gambar Opsi jika ada */}
+                        {optImg && (
+                          <div className="ml-8 flex items-center gap-3 bg-purple-50/50 p-2 rounded-xl border border-purple-200">
+                            <img
+                              src={optImg}
+                              alt={`Gambar Opsi ${label}`}
+                              className="h-16 w-auto object-contain rounded-lg border border-purple-200 bg-white"
+                            />
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-purple-900">Gambar Opsi {label}</p>
+                              <p className="text-[10px] text-purple-600 font-medium">Tersimpan dalam opsi jawaban</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveOptionImage(idx)}
+                              className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus Gambar Opsi"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -733,35 +1031,75 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
                 </label>
 
                 <div className="space-y-3">
-                  {labels.map((label, idx) => (
-                    <div key={label} className="flex items-start gap-3">
-                      <div className="mt-2.5 flex items-center">
-                        <input
-                          type="radio"
-                          name="q-edit-correct"
-                          checked={correctIndex === idx}
-                          onChange={() => setCorrectIndex(idx)}
-                          className="w-5 h-5 cursor-pointer text-blue-600 focus:ring-blue-500"
-                        />
-                      </div>
-                      <div className="flex-1 relative">
-                        <div className="absolute left-3 top-2.5 font-bold text-gray-400 text-sm">
-                          {label}.
+                  {labels.map((label, idx) => {
+                    const optImg = optionImages[idx];
+                    return (
+                      <div key={label} className="bg-white p-3 rounded-2xl border-2 border-slate-200 shadow-2xs space-y-2">
+                        <div className="flex items-start gap-3">
+                          <div className="mt-2.5 flex items-center">
+                            <input
+                              type="radio"
+                              name="q-edit-correct"
+                              checked={correctIndex === idx}
+                              onChange={() => setCorrectIndex(idx)}
+                              className="w-5 h-5 cursor-pointer text-blue-600 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="flex-1 relative">
+                            <div className="absolute left-3 top-2.5 font-bold text-gray-400 text-sm">
+                              {label}.
+                            </div>
+                            <input
+                              type="text"
+                              value={optionsText[idx]}
+                              onChange={(e) => {
+                                const newOpts = [...optionsText];
+                                newOpts[idx] = e.target.value;
+                                setOptionsText(newOpts);
+                              }}
+                              className="w-full border-2 border-gray-200 rounded-lg py-2 pl-9 pr-3 focus:border-blue-500 focus:outline-none text-sm bg-white"
+                              placeholder={`Masukkan teks pilihan ${label}`}
+                            />
+                          </div>
+                          {/* Tombol Upload Gambar Opsi */}
+                          <label className="mt-1 relative cursor-pointer inline-flex items-center gap-1.5 bg-gradient-to-r from-sky-600 to-blue-700 hover:from-sky-700 hover:to-blue-800 text-white text-xs font-black px-3 py-2 rounded-xl transition-all shadow-xs shrink-0 active:scale-95 animate-pulse">
+                            <FileImage className="w-4 h-4 text-amber-300" />
+                            <span>Gambar Opsi</span>
+                            <span className="bg-amber-400 text-slate-900 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider">✨ BARU</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleOptionImageUpload(idx, e)}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                          </label>
                         </div>
-                        <input
-                          type="text"
-                          value={optionsText[idx]}
-                          onChange={(e) => {
-                            const newOpts = [...optionsText];
-                            newOpts[idx] = e.target.value;
-                            setOptionsText(newOpts);
-                          }}
-                          className="w-full border-2 border-gray-200 rounded-lg py-2 pl-9 pr-3 focus:border-blue-500 focus:outline-none text-sm bg-white"
-                          placeholder={`Masukkan pilihan ${label}`}
-                        />
+
+                        {/* Preview Gambar Opsi jika ada */}
+                        {optImg && (
+                          <div className="ml-8 flex items-center gap-3 bg-sky-50/50 p-2 rounded-xl border border-sky-200">
+                            <img
+                              src={optImg}
+                              alt={`Gambar Opsi ${label}`}
+                              className="h-16 w-auto object-contain rounded-lg border border-sky-200 bg-white"
+                            />
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-sky-900">Gambar Opsi {label}</p>
+                              <p className="text-[10px] text-sky-600 font-medium">Tersimpan dalam opsi jawaban</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveOptionImage(idx)}
+                              className="p-1.5 text-red-600 hover:bg-red-100 rounded-lg transition-colors cursor-pointer"
+                              title="Hapus Gambar Opsi"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -806,26 +1144,46 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
               )}
             </div>
 
-            {/* Lampiran Gambar jika ada */}
-            {imageString && (
-              <div className="bg-white p-4 rounded-2xl border border-slate-200 flex justify-center shadow-xs">
-                <img
-                  src={imageString}
-                  alt="Lampiran Soal"
-                  className="max-h-72 w-auto object-contain rounded-xl border border-slate-200"
-                />
-              </div>
-            )}
-
-            {/* Teks Pertanyaan */}
-            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-              <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2">
+            {/* Teks Pertanyaan & Lampiran Gambar berdasarkan Posisi */}
+            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4">
+              <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
                 Pertanyaan
               </p>
+
+              {/* Lampiran Gambar Di Atas Teks */}
+              {questionImages.length > 0 && imagePosition === 'top' && (
+                <div className={`my-3 grid gap-3 ${questionImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                  {questionImages.map((src, i) => (
+                    <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-center">
+                      <img
+                        src={src}
+                        alt={`Lampiran Soal #${i + 1} (Atas)`}
+                        className="max-h-72 w-auto object-contain rounded-lg border border-slate-200"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
               <div
                 className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
                 dangerouslySetInnerHTML={{ __html: formatQuestionText(questionText) || '<i class="text-slate-400">(Teks pertanyaan belum diisi)</i>' }}
               />
+
+              {/* Lampiran Gambar Di Tengah / Di Bawah Teks */}
+              {questionImages.length > 0 && (imagePosition === 'middle' || imagePosition === 'bottom') && (
+                <div className={`my-3 grid gap-3 ${questionImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                  {questionImages.map((src, i) => (
+                    <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-center">
+                      <img
+                        src={src}
+                        alt={`Lampiran Soal #${i + 1} (${imagePosition})`}
+                        className="max-h-72 w-auto object-contain rounded-lg border border-slate-200"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Pilihan Jawaban Preview */}
@@ -864,29 +1222,42 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
                   const isMcma = bentukSoalText.toLowerCase().includes('mcma') || (bentukSoalText.toLowerCase().includes('kompleks') && !bentukSoalText.toLowerCase().includes('kategori'));
                   const isCorrect = isMcma ? mcmaCorrectIndices.includes(idx) : idx === correctIndex;
                   const text = optionsText[idx] || `(Pilihan ${label} belum diisi)`;
+                  const optImg = optionImages[idx];
                   return (
                     <div
                       key={label}
-                      className={`p-3.5 rounded-2xl border flex items-start gap-3 transition-all ${
+                      className={`p-3.5 rounded-2xl border flex flex-col gap-2 transition-all ${
                         isCorrect
                           ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold shadow-xs'
                           : 'bg-white border-slate-200 text-slate-800'
                       }`}
                     >
-                      <span
-                        className={`w-7 h-7 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 ${
-                          isCorrect
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 text-slate-700 border border-slate-200'
-                        }`}
-                      >
-                        {label}
-                      </span>
-                      <div className="flex-1 pt-1 text-sm">{text}</div>
-                      {isCorrect && (
-                        <span className="bg-emerald-200 text-emerald-900 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-700" /> KUNCI JAWABAN
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 ${
+                            isCorrect
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {label}
                         </span>
+                        <div className="flex-1 pt-1 text-sm">{text}</div>
+                        {isCorrect && (
+                          <span className="bg-emerald-200 text-emerald-900 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-700" /> KUNCI JAWABAN
+                          </span>
+                        )}
+                      </div>
+                      {/* Display Option Image in Preview */}
+                      {optImg && (
+                        <div className="ml-10 mt-1">
+                          <img
+                            src={optImg}
+                            alt={`Opsi ${label}`}
+                            className="max-h-48 w-auto object-contain rounded-lg border border-slate-200 bg-white p-1"
+                          />
+                        </div>
                       )}
                     </div>
                   );

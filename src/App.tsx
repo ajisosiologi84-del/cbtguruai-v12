@@ -1122,10 +1122,14 @@ export default function App() {
     options: Option[];
     explanation: string;
     image?: string;
+    images?: string[];
+    imagePosition?: 'top' | 'middle' | 'bottom';
     mapel?: string;
+    kompetensi?: string;
     subTopik?: string;
     bentukSoal?: string;
     kodeGuru?: string;
+    poin?: number;
     categoryOptions?: string[];
     categoryStatements?: any[];
     id?: number;
@@ -1143,12 +1147,16 @@ export default function App() {
           options: qData.options,
           explanation: qData.explanation,
           image: qData.image,
+          images: qData.images,
+          imagePosition: qData.imagePosition,
           mapel: qData.mapel || updatedQuestions[idx].mapel || config.mapel || 'Sosiologi',
-          subTopik: qData.subTopik,
+          kompetensi: qData.kompetensi || qData.subTopik,
+          subTopik: qData.subTopik || qData.kompetensi,
           bentukSoal: qData.bentukSoal || updatedQuestions[idx].bentukSoal || 'Pilihan Ganda',
           kodeGuru: qData.kodeGuru || updatedQuestions[idx].kodeGuru || activeKodeGuru,
           categoryOptions: qData.categoryOptions,
           categoryStatements: qData.categoryStatements,
+          poin: typeof qData.poin === 'number' && qData.poin > 0 ? qData.poin : updatedQuestions[idx].poin || 10,
         };
       }
     } else {
@@ -1160,12 +1168,17 @@ export default function App() {
         options: qData.options,
         explanation: qData.explanation,
         image: qData.image,
+        images: qData.images,
+        imagePosition: qData.imagePosition,
         mapel: qData.mapel || config.mapel || 'Sosiologi',
-        subTopik: qData.subTopik,
+        kompetensi: qData.kompetensi || qData.subTopik,
+        subTopik: qData.subTopik || qData.kompetensi,
         bentukSoal: qData.bentukSoal || 'Pilihan Ganda',
         kodeGuru: qData.kodeGuru || activeKodeGuru,
         categoryOptions: qData.categoryOptions,
         categoryStatements: qData.categoryStatements,
+        poin: typeof qData.poin === 'number' && qData.poin > 0 ? qData.poin : 10,
+        isActive: true,
       });
     }
 

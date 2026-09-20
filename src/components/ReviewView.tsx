@@ -73,15 +73,25 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ questions, answers, onEx
                   </span>
                 </div>
 
-                {q.image && (
-                  <div className="mb-5 flex justify-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-                    <img
-                      src={q.image}
-                      alt="Lampiran Soal"
-                      className="max-h-72 w-auto object-contain rounded-xl border border-slate-100"
-                    />
-                  </div>
-                )}
+                {(() => {
+                  const qImages = q.images && Array.isArray(q.images) && q.images.length > 0
+                    ? q.images.filter(Boolean)
+                    : (q.image?.trim() ? [q.image.trim()] : []);
+                  if (qImages.length === 0) return null;
+                  return (
+                    <div className={`mb-5 grid gap-3 ${qImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                      {qImages.map((imgSrc, idx) => (
+                        <div key={idx} className="flex justify-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+                          <img
+                            src={imgSrc}
+                            alt={`Lampiran Soal #${idx + 1}`}
+                            className="max-h-72 w-auto object-contain rounded-xl border border-slate-100"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 <div
                   className="text-gray-800 mb-6 font-medium text-base sm:text-lg leading-relaxed overflow-x-auto"

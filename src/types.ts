@@ -2,6 +2,7 @@ export interface Option {
   id: string; // 'A', 'B', 'C', 'D', 'E'
   text: string;
   isCorrect: boolean;
+  image?: string; // Base64 data URL or image URL for answer option
 }
 
 export interface CategoryStatement {
@@ -15,7 +16,9 @@ export interface Question {
   question: string;
   options: Option[];
   explanation: string;
-  image?: string; // Base64 data URL or image URL for question image / table / diagram
+  image?: string; // Base64 data URL or image URL for question image / table / diagram (legacy single image)
+  images?: string[]; // Array of Base64 or image URLs for multiple question images
+  imagePosition?: 'top' | 'middle' | 'bottom'; // Posisi Gambar Soal (default 'top')
   isActive?: boolean; // Default true, toggle to enable/disable for exam
   mapel?: string; // Mata pelajaran (e.g. 'Sosiologi', 'Geografi', etc.)
   kompetensi?: string; // Kompetensi Dasar / Sub Topik / Capaian Pembelajaran (e.g. 'Perubahan Sosial', '3.1 KD Sosiologi', dll)
@@ -71,6 +74,22 @@ export interface KopSekolahConfig {
   logoPemda?: string; // Base64 Data URL or Image URL (Logo Pemda / Dinas / Sebelah Kiri)
   paperSize?: 'a4' | 'f4' | 'letter' | 'legal';
   orientation?: 'portrait' | 'landscape';
+  stempelSekolah?: string; // Base64 Data URL or Image URL (Stempel Sekolah)
+  ttdKepalaSekolah?: string; // Base64 Data URL or Image URL (TTD Digital Kepala Sekolah)
+  ttdOffsetX?: number; // Offset Horisontal TTD (px)
+  ttdOffsetY?: number; // Offset Vertikal TTD (px)
+  ttdScale?: number; // Tinggi TTD (px)
+  ttdRotate?: number; // Rotasi TTD (derajat)
+  stempelOffsetX?: number; // Offset Horisontal Stempel (px)
+  stempelOffsetY?: number; // Offset Vertikal Stempel (px)
+  stempelScale?: number; // Ukuran Stempel (px)
+  stempelOpacity?: number; // Opasitas Stempel (0.1 - 1.0)
+  showStempel?: boolean;
+  showTtd?: boolean;
+  cardPresetSize?: 'B8' | 'B7' | 'STANDARD' | 'LARGE' | 'CUSTOM';
+  customCardWidthMm?: number;
+  customCardHeightMm?: number;
+  customGridColumns?: number;
 }
 
 export interface CheatingLog {
@@ -159,6 +178,7 @@ export interface AppConfig {
   adminUsername?: string; // Username Admin Utama (default: 'admincbt')
   adminPassword?: string; // Password Admin Utama (default: 'JuniorCBT2026')
   driveUploadUrl?: string; // Link Google Drive untuk Upload Hasil Jawaban Siswa
+  driveDownloadUrl?: string; // Link Google Drive untuk Unduh File Paket Soal (.json) Siswa/Proktor
   googleSheetsWebhookUrl?: string; // Web App URL Apps Script untuk Sinkronisasi Bank Soal ke Google Sheets
   youtubeGuideUrl?: string; // Link Video YouTube Panduan Guru (dikeloa Admin)
   customWarningAudioUrl?: string; // URL Audio MP3 Peringatan Kecurangan

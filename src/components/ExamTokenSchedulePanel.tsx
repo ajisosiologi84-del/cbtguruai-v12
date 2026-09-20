@@ -59,6 +59,18 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingToken, setEditingToken] = useState<ExamScheduleToken | null>(null);
 
+  // Modal State for Berita Acara & Attendance Print
+  const [showBeritaAcaraModal, setShowBeritaAcaraModal] = useState(false);
+  const [selectedSesiId, setSelectedSesiId] = useState<string>('ALL');
+  const [selectedKelasFilter, setSelectedKelasFilter] = useState<string>('ALL');
+  const [ruangUjianInput, setRuangUjianInput] = useState<string>('Ruang 01 (Lab Komputer A)');
+  const [pengawas1Input, setPengawas1Input] = useState<string>('Drs. Supriyadi, M.Pd');
+  const [pengawas2Input, setPengawas2Input] = useState<string>('Siti Nurhaliza, S.Pd');
+  const [catatanKejadian, setCatatanKejadian] = useState<string>('Pelaksanaan ujian berlangsung dengan tertib, aman, dan lancar. Seluruh sistem CBT berjalan optimal.');
+  const [includeDaftarHadir, setIncludeDaftarHadir] = useState<boolean>(true);
+  const [includeKartuToken, setIncludeKartuToken] = useState<boolean>(true);
+  const [studentStatusFilter, setStudentStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ACTIVE');
+
   // Form State
   const [formNamaSesi, setFormNamaSesi] = useState('');
   const [formTanggal, setFormTanggal] = useState('');
@@ -586,7 +598,7 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
 
   const currentActiveToken = activePrimarySchedule ? activePrimarySchedule.token : config.examToken || 'SOS2026';
 
-  // Print Full Berita Acara & Token Distribution
+  // Print Full Berita Acara & Active Student Data per Class/Room
   const handlePrintFullBeritaAcara = () => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
@@ -600,71 +612,295 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
       namaGuru: config.teachers?.[0]?.nama || 'Guru Mata Pelajaran',
       nipGuru: config.teachers?.[0]?.nip || '-',
       jabatanGuru: 'Guru Pengampu / Proktor CBT',
+      namaKepalaSekolah: 'Dr. H. Ahmad Sanusi, M.Si',
+      nipKepalaSekolah: '197203101998021001',
     };
+
+    const allStudentsList = config.students || [];
+
+    // Filter students based on selected class or session
+    const targetSchedules =
+      selectedSesiId === 'ALL'
+        ? scheduleList
+        : scheduleList.filter((s) => s.id === selectedSesiId);
+
+    const activeStudentsList = allStudentsList.filter((s) => {
+      if (selectedKelasFilter !== 'ALL' && s.kelas !== selectedKelasFilter) return false;
+      if (studentStatusFilter === 'ACTIVE' && s.isActive === false) return false;
+      if (studentStatusFilter === 'INACTIVE' && s.isActive !== false) return false;
+      return true;
+    });
+
+    const activeStudentsOnly = allStudentsList.filter((s) => {
+      if (selectedKelasFilter !== 'ALL' && s.kelas !== selectedKelasFilter) return false;
+      return s.isActive !== false;
+    });
+
+    const inactiveStudents = allStudentsList.filter((s) => {
+      if (selectedKelasFilter !== 'ALL' && s.kelas !== selectedKelasFilter) return false;
+      return s.isActive === false;
+    });
+
+    const logoHtml = kop.logoSekolah
+      ? `<img src="${kop.logoSekolah}" style="max-height: 65px; width: auto;" alt="Logo" />`
+      : '';
+    const logoPemdaHtml = kop.logoPemda
+      ? `<img src="${kop.logoPemda}" style="max-height: 65px; width: auto;" alt="Logo Pemda" />`
+      : '';
 
     const html = `<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Berita Acara & Distribusi Token CBT</title>
+  <title>BERITA ACARA PELAKSANAAN UJIAN CBT & DAFTAR HADIR SISWA</title>
   <style>
-    body { font-family: 'Times New Roman', Times, serif; color: #000; margin: 20px 30px; font-size: 13px; line-height: 1.4; }
-    .kop { text-align: center; border-bottom: 3px double #000; padding-bottom: 10px; margin-bottom: 15px; }
-    .kop h2 { margin: 0; font-size: 16px; font-weight: bold; text-transform: uppercase; }
-    .kop h1 { margin: 2px 0; font-size: 18px; font-weight: bold; }
-    .kop p { margin: 2px 0; font-size: 11px; }
-    .title { text-align: center; font-weight: bold; font-size: 15px; margin: 15px 0 10px 0; text-decoration: underline; text-transform: uppercase; }
-    .sub-title { text-align: center; font-size: 12px; margin-top: -8px; margin-bottom: 15px; }
-    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-    th, td { border: 1px solid #000; padding: 6px 8px; font-size: 12px; }
-    th { background-color: #f2f2f2; text-align: center; font-weight: bold; }
-    .token-badge { font-family: monospace; font-size: 14px; font-weight: bold; letter-spacing: 2px; text-align: center; background: #fafafa; }
+    @page { size: A4 portrait; margin: 12mm 15mm; }
+    body { font-family: 'Times New Roman', Times, serif; color: #000; margin: 0; font-size: 12px; line-height: 1.35; background: #fff; }
+    
+    .header-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; border-bottom: 3px double #000; padding-bottom: 6px; }
+    .header-table td { border: none !important; padding: 2px 4px; vertical-align: middle; }
+    .kop-title h2 { margin: 0; font-size: 14px; font-weight: bold; text-transform: uppercase; }
+    .kop-title h1 { margin: 2px 0; font-size: 17px; font-weight: bold; text-transform: uppercase; }
+    .kop-title p { margin: 1px 0; font-size: 10px; font-style: italic; }
+
+    .doc-title { text-align: center; font-weight: bold; font-size: 14px; margin: 12px 0 4px 0; text-decoration: underline; text-transform: uppercase; letter-spacing: 0.5px; }
+    .doc-subtitle { text-align: center; font-size: 11px; margin-bottom: 12px; font-weight: bold; }
+
+    .meta-box { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    .meta-box td { border: none !important; padding: 3px 6px; font-size: 12px; vertical-align: top; }
+
+    table.data-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+    table.data-table th, table.data-table td { border: 1px solid #000; padding: 5px 7px; font-size: 11px; }
+    table.data-table th { background-color: #f0f0f0; text-align: center; font-weight: bold; text-transform: uppercase; }
+    
     .text-center { text-align: center; }
-    .ttd-container { width: 100%; margin-top: 30px; display: table; }
-    .ttd-box { display: table-cell; width: 50%; text-align: center; }
-    .card-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; page-break-before: always; }
-    .token-card { width: 47%; border: 1px dashed #333; padding: 12px; box-sizing: border-box; border-radius: 6px; }
-    .token-card-header { font-weight: bold; font-size: 13px; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-bottom: 6px; }
-    .token-card-code { font-family: monospace; font-size: 20px; font-weight: bold; letter-spacing: 3px; text-align: center; margin: 8px 0; border: 1px solid #000; padding: 6px; background: #fdfdfd; }
-    @media print {
-      body { margin: 10mm 15mm; }
-    }
+    .text-right { text-align: right; }
+    .font-bold { font-weight: bold; }
+    .badge-active { background: #dcfce7; color: #166534; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+    .badge-inactive { background: #fee2e2; color: #991b1b; font-weight: bold; padding: 2px 6px; border-radius: 4px; font-size: 10px; }
+
+    .note-box { border: 1px solid #000; padding: 8px; font-size: 11px; min-height: 45px; margin-top: 6px; background: #fafafa; }
+
+    .ttd-4-col { width: 100%; margin-top: 25px; border-collapse: collapse; }
+    .ttd-4-col td { border: none !important; text-align: center; vertical-align: top; font-size: 11px; width: 25%; padding: 4px; }
+    .ttd-space { height: 50px; }
+
+    .page-break { page-break-before: always; margin-top: 20px; }
+
+    /* Absensi Paraf Grid */
+    .paraf-box { font-size: 10px; height: 28px; vertical-align: middle; }
+
+    .token-card { width: 48%; border: 1px dashed #333; padding: 10px; box-sizing: border-box; border-radius: 6px; margin-bottom: 10px; display: inline-block; vertical-align: top; }
+    .token-card-header { font-weight: bold; font-size: 11px; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 4px; }
+    .token-card-code { font-family: monospace; font-size: 18px; font-weight: bold; letter-spacing: 2px; text-align: center; margin: 6px 0; border: 1px solid #000; padding: 4px; background: #fdfdfd; }
   </style>
 </head>
 <body>
-  <div class="kop">
-    <h2>${kop.dinas}</h2>
-    <h1>${kop.namaSekolah}</h1>
-    <p>${kop.alamat} - ${kop.teleponWeb}</p>
+
+  <!-- ================= HALAMAN 1: BERITA ACARA ================= -->
+  <table class="header-table">
+    <tr>
+      <td style="width: 12%; text-align: left;">${logoPemdaHtml}</td>
+      <td style="width: 76%; text-align: center;" class="kop-title">
+        <h2>${kop.dinas}</h2>
+        <h1>${kop.namaSekolah}</h1>
+        <p>${kop.alamat} - ${kop.teleponWeb}</p>
+      </td>
+      <td style="width: 12%; text-align: right;">${logoHtml}</td>
+    </tr>
+  </table>
+
+  <div class="doc-title">BERITA ACARA PELAKSANAAN UJIAN BERBASIS KOMPUTER (CBT)</div>
+  <div class="doc-subtitle">MATA PELAJARAN: ${config.mapel || 'SOSIOLOGI'} — TAHUN AJARAN 2025/2026</div>
+
+  <p style="text-align: justify; margin-bottom: 8px;">
+    Pada hari ini <b>${new Date().toLocaleDateString('id-ID', { weekday: 'long' })}</b>, tanggal <b>${kop.kotaTanggal}</b>, telah dilaksanakan Ujian Berbasis Komputer (CBT) untuk Peserta Didik Aktif dengan rincian data sebagai berikut:
+  </p>
+
+  <table class="meta-box">
+    <tr>
+      <td style="width: 18%;"><b>Mata Pelajaran</b></td>
+      <td style="width: 2%;">:</td>
+      <td style="width: 30%;">${config.mapel || 'Sosiologi'}</td>
+      <td style="width: 18%;"><b>Ruang Ujian</b></td>
+      <td style="width: 2%;">:</td>
+      <td style="width: 30%;"><b>${ruangUjianInput}</b></td>
+    </tr>
+    <tr>
+      <td><b>Target Kelas</b></td>
+      <td>:</td>
+      <td>${selectedKelasFilter === 'ALL' ? 'Semua Kelas Aktif' : selectedKelasFilter}</td>
+      <td><b>Pengawas Ruang 1</b></td>
+      <td>:</td>
+      <td>${pengawas1Input}</td>
+    </tr>
+    <tr>
+      <td><b>Waktu Ujian</b></td>
+      <td>:</td>
+      <td>${targetSchedules[0]?.jamMulai || '08:00'} - ${targetSchedules[0]?.jamSelesai || '09:30'} WIB (${targetSchedules[0]?.durasiMenit || config.duration} Menit)</td>
+      <td><b>Pengawas Ruang 2</b></td>
+      <td>:</td>
+      <td>${pengawas2Input}</td>
+    </tr>
+    <tr>
+      <td><b>Token Ujian</b></td>
+      <td>:</td>
+      <td><b style="font-family: monospace; font-size: 13px; letter-spacing: 1.5px;">${currentActiveToken}</b></td>
+      <td><b>Proktor CBT</b></td>
+      <td>:</td>
+      <td>${kop.namaGuru}</td>
+    </tr>
+  </table>
+
+  <!-- REKAPITULASI KEHADIRAN SISWA -->
+  <div style="font-weight: bold; margin-top: 10px; margin-bottom: 4px; font-size: 12px;">
+    I. REKAPITULASI PESERTA UJIAN AKTIF PER KELAS / RUANG:
   </div>
 
-  <div class="title">BERITA ACARA & DAFTAR DISTRIBUSI TOKEN UJIAN CBT</div>
-  <div class="sub-title">Mata Pelajaran: <b>${config.mapel || 'Sosiologi'}</b> | Tahun Ajaran 2025/2026</div>
-
-  <p>Pada hari ini, tanggal <b>${kop.kotaTanggal}</b>, telah disiapkan dan disinkronkan jadwal pelaksanaan Ujian Berbasis Komputer (CBT) dengan rincian paket soal dan token sebagai berikut:</p>
-
-  <table>
+  <table class="data-table">
     <thead>
       <tr>
         <th style="width: 5%;">No</th>
-        <th style="width: 25%;">Nama Sesi & Target Kelas</th>
-        <th style="width: 20%;">Paket Soal & Kode</th>
-        <th style="width: 20%;">Waktu & Durasi</th>
-        <th style="width: 15%;">TOKEN UJIAN</th>
-        <th style="width: 15%;">Status</th>
+        <th style="width: 25%;">Target Kelas / Ruang</th>
+        <th style="width: 20%;">Total Terdaftar</th>
+        <th style="width: 20%;">Siswa Aktif (Hadir)</th>
+        <th style="width: 20%;">Siswa Non-Aktif (Absen)</th>
+        <th style="width: 10%;">Persentase</th>
       </tr>
     </thead>
     <tbody>
-      ${scheduleList
+      <tr>
+        <td class="text-center">1</td>
+        <td><b>${selectedKelasFilter === 'ALL' ? 'Seluruh Kelas Aktif' : selectedKelasFilter}</b> (${ruangUjianInput})</td>
+        <td class="text-center font-bold">${allStudentsList.length} Siswa</td>
+        <td class="text-center font-bold" style="color: #15803d;">${activeStudentsOnly.length} Siswa</td>
+        <td class="text-center font-bold" style="color: #b91c1c;">${inactiveStudents.length} Siswa</td>
+        <td class="text-center font-bold">${allStudentsList.length > 0 ? Math.round((activeStudentsOnly.length / allStudentsList.length) * 100) : 100}%</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- RINCIAN DAFTAR SISWA NON-AKTIF / ABSEN (JIKA ADA) -->
+  ${
+    inactiveStudents.length > 0
+      ? `
+  <div style="font-weight: bold; margin-top: 8px; margin-bottom: 4px; color: #991b1b; font-size: 11px;">
+    * Rincian Peserta Ujian yang Tidak Aktif / Tidak Hadir (${inactiveStudents.length} Siswa):
+  </div>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 8%;">No</th>
+        <th style="width: 22%;">NIS / No. Peserta</th>
+        <th style="width: 45%;">Nama Siswa</th>
+        <th style="width: 25%;">Kelas</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${inactiveStudents
         .map(
-          (s, idx) => `
+          (st, i) => `
+        <tr>
+          <td class="text-center">${i + 1}</td>
+          <td class="text-center font-bold">${st.nis}</td>
+          <td>${st.nama}</td>
+          <td class="text-center">${st.kelas}</td>
+        </tr>
+      `
+        )
+        .join('')}
+    </tbody>
+  </table>
+  `
+      : '<p style="font-size: 11px; font-style: italic; color: #166534; margin: 4px 0;">* Seluruh peserta terdaftar dalam status AKTIF dan mengikuti ujian.</p>'
+  }
+
+  <!-- CATATAN KEJADIAN KHUSUS -->
+  <div style="font-weight: bold; margin-top: 10px; margin-bottom: 4px; font-size: 12px;">
+    II. CATATAN & KEJADIAN KHUSUS SELAMA UJIAN:
+  </div>
+  <div class="note-box">
+    ${catatanKejadian || 'Ujian berjalan tertib, lancar, dan tanpa hambatan teknis.'}
+  </div>
+
+  <p style="margin-top: 12px;">Demikian Berita Acara Pelaksanaan Ujian ini dibuat dengan sebenarnya untuk dipergunakan sebagaimana mestinya.</p>
+
+  <!-- TANDA TANGAN 4 PIHAK -->
+  <table class="ttd-4-col">
+    <tr>
+      <td>
+        Pengawas Ruang 1,<br>
+        <div class="ttd-space"></div>
+        <b><u>${pengawas1Input}</u></b><br>
+        NIP. -
+      </td>
+      <td>
+        Pengawas Ruang 2,<br>
+        <div class="ttd-space"></div>
+        <b><u>${pengawas2Input}</u></b><br>
+        NIP. -
+      </td>
+      <td>
+        Proktor CBT,<br>
+        <div class="ttd-space"></div>
+        <b><u>${kop.namaGuru}</u></b><br>
+        NIP. ${kop.nipGuru}
+      </td>
+      <td>
+        Mengetahui,<br>
+        Kepala Sekolah<br>
+        <div class="ttd-space"></div>
+        <b><u>${kop.namaKepalaSekolah}</u></b><br>
+        NIP. ${kop.nipKepalaSekolah}
+      </td>
+    </tr>
+  </table>
+
+  <!-- ================= HALAMAN 2: LAMPIRAN DAFTAR HADIR SISWA AKTIF ================= -->
+  ${
+    includeDaftarHadir
+      ? `
+  <div class="page-break"></div>
+
+  <table class="header-table">
+    <tr>
+      <td style="width: 12%; text-align: left;">${logoPemdaHtml}</td>
+      <td style="width: 76%; text-align: center;" class="kop-title">
+        <h2>${kop.dinas}</h2>
+        <h1>${kop.namaSekolah}</h1>
+        <p>${kop.alamat} - ${kop.teleponWeb}</p>
+      </td>
+      <td style="width: 12%; text-align: right;">${logoHtml}</td>
+    </tr>
+  </table>
+
+  <div class="doc-title">DAFTAR HADIR PESERTA UJIAN AKTIF (CBT)</div>
+  <div class="doc-subtitle">MATA PELAJARAN: ${config.mapel || 'SOSIOLOGI'} | KELAS: ${selectedKelasFilter === 'ALL' ? 'SEMUA KELAS' : selectedKelasFilter} | RUANG: ${ruangUjianInput}</div>
+
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th style="width: 5%;">No</th>
+        <th style="width: 18%;">NIS / No. Peserta</th>
+        <th style="width: 37%;">Nama Lengkap Siswa</th>
+        <th style="width: 15%;">Kelas</th>
+        <th style="width: 10%;">Status</th>
+        <th style="width: 15%;">Tanda Tangan / Paraf</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${activeStudentsList
+        .map(
+          (st, idx) => `
         <tr>
           <td class="text-center">${idx + 1}</td>
-          <td><b>${s.namaSesi}</b><br><small>Kelas: ${s.targetKelas || '-'}</small></td>
-          <td>${s.paketSoal}<br><small>(${s.kodePaket})</small></td>
-          <td class="text-center">${s.jamMulai} - ${s.jamSelesai}<br><small>(${s.durasiMenit} Menit | KKM: ${s.kkm})</small></td>
-          <td class="token-badge">${s.token}</td>
-          <td class="text-center">${s.status === 'ACTIVE' ? '🟢 AKTIF' : s.status === 'STANDBY' ? '🟡 STANDBY' : '🔴 CLOSED'}</td>
+          <td class="text-center font-bold" style="font-family: monospace;">${st.nis}</td>
+          <td><b>${st.nama}</b></td>
+          <td class="text-center">${st.kelas}</td>
+          <td class="text-center">${st.isActive !== false ? '<span class="badge-active">AKTIF</span>' : '<span class="badge-inactive">NON-AKTIF</span>'}</td>
+          <td class="paraf-box" style="padding-left: ${idx % 2 === 0 ? '6px' : '20px'};">
+            ${idx + 1}. ....................
+          </td>
         </tr>
       `
         )
@@ -672,25 +908,33 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
     </tbody>
   </table>
 
-  <p>Demikian Berita Acara Distribusi Token ini dibuat dengan sebenarnya untuk dipergunakan dalam pengawasan dan kelancaran pelaksanaan ujian.</p>
+  <table class="ttd-4-col" style="margin-top: 20px;">
+    <tr>
+      <td></td>
+      <td>
+        Pengawas Ruang Ujian,<br>
+        <div class="ttd-space"></div>
+        <b><u>${pengawas1Input}</u></b>
+      </td>
+      <td>
+        Proktor CBT,<br>
+        <div class="ttd-space"></div>
+        <b><u>${kop.namaGuru}</u></b>
+      </td>
+      <td></td>
+    </tr>
+  </table>
+  `
+      : ''
+  }
 
-  <div class="ttd-container">
-    <div class="ttd-box">
-      Mengetahui,<br>
-      Kepala Sekolah<br><br><br><br>
-      <b><u>${kop.namaKepalaSekolah || 'Dr. H. Ahmad Sanusi, M.Si'}</u></b><br>
-      NIP. ${kop.nipKepalaSekolah || '197203101998021001'}
-    </div>
-    <div class="ttd-box">
-      ${kop.kotaTanggal}<br>
-      Proktor / Guru Pengampu<br><br><br><br>
-      <b><u>${kop.namaGuru}</u></b><br>
-      NIP. ${kop.nipGuru}
-    </div>
-  </div>
-
-  <!-- HALAMAN KARTU SLIP TOKEN -->
-  <div class="card-grid">
+  <!-- ================= HALAMAN 3: SLIP KARTU TOKEN (OPSIONAL) ================= -->
+  ${
+    includeKartuToken
+      ? `
+  <div class="page-break"></div>
+  <div class="doc-title" style="margin-bottom: 12px;">LAMPIRAN SLIP TOKEN UJIAN PER SESI</div>
+  <div style="display: flex; flex-wrap: wrap; gap: 12px; justify-content: space-between;">
     ${scheduleList
       .map(
         (s) => `
@@ -699,18 +943,21 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
         <div style="font-size: 11px;">
           <div><b>Sesi:</b> ${s.namaSesi}</div>
           <div><b>Mapel:</b> ${s.mapel} (${s.paketSoal})</div>
-          <div><b>Kelas:</b> ${s.targetKelas}</div>
-          <div><b>Waktu:</b> ${s.jamMulai} - ${s.jamSelesai} (${s.durasiMenit} Menit)</div>
+          <div><b>Target Kelas:</b> ${s.targetKelas}</div>
+          <div><b>Waktu:</b> ${s.jamMulai} - ${s.jamSelesai} WIB (${s.durasiMenit} Menit)</div>
         </div>
         <div class="token-card-code">${s.token}</div>
-        <div style="font-size: 9px; text-align: center; color: #555;">
-          *Masukkan token saat login CBT. Rahasiakan token dari peserta sesi lain.
+        <div style="font-size: 9px; text-align: center; color: #666;">
+          *Token rahasia peserta sesi aktif. Diinput saat login portal CBT.
         </div>
       </div>
     `
       )
       .join('')}
   </div>
+  `
+      : ''
+  }
 
   <script>
     window.onload = function() {
@@ -982,11 +1229,11 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
           </button>
 
           <button
-            onClick={handlePrintFullBeritaAcara}
-            className="inline-flex items-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 font-bold px-3 py-2 rounded-xl text-xs transition border border-blue-200 cursor-pointer"
-            title="Cetak Berita Acara & Slip Distribusi Token Seluruh Sesi"
+            onClick={() => setShowBeritaAcaraModal(true)}
+            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-black px-3.5 py-2 rounded-xl text-xs transition shadow-md border border-blue-500 cursor-pointer active:scale-95"
+            title="Pengaturan & Cetak Berita Acara Pelaksanaan Ujian (Lengkap Data Siswa Aktif per Kelas/Ruang)"
           >
-            <Printer className="w-3.5 h-3.5 text-blue-600" /> Cetak Berita Acara (A4)
+            <Printer className="w-4 h-4 text-white" /> Cetak Berita Acara (A4)
           </button>
         </div>
       </div>
@@ -1577,6 +1824,290 @@ export const ExamTokenSchedulePanel: React.FC<ExamTokenSchedulePanelProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL: CETAK BERITA ACARA & DAFTAR HADIR SISWA AKTIF PER KELAS / RUANG */}
+      {showBeritaAcaraModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-700 via-indigo-800 to-slate-900 p-5 text-white flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/10 rounded-2xl border border-white/20">
+                  <Printer className="w-6 h-6 text-blue-300" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black tracking-tight flex items-center gap-2">
+                    Cetak Berita Acara & Presensi Siswa Aktif
+                  </h3>
+                  <p className="text-xs text-blue-200 font-medium">
+                    Lengkapi data ruang, pengawas, dan daftar siswa aktif per kelas untuk dokumen resmi A4
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowBeritaAcaraModal(false)}
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-slate-800">
+              {/* Grid Form Options */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                {/* 1. Filter Sesi Ujian */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Pilih Sesi Ujian
+                  </label>
+                  <select
+                    value={selectedSesiId}
+                    onChange={(e) => setSelectedSesiId(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="ALL">Semua Sesi ({scheduleList.length} Sesi)</option>
+                    {scheduleList.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.namaSesi} ({s.targetKelas}) - Token: {s.token}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Filter Kelas Siswa */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Filter Kelas Siswa
+                  </label>
+                  <select
+                    value={selectedKelasFilter}
+                    onChange={(e) => setSelectedKelasFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="ALL">Semua Kelas ({config.students?.length || 0} Siswa)</option>
+                    {Array.from(
+                      new Set((config.students || []).map((s) => s.kelas || 'Umum').filter(Boolean))
+                    )
+                      .sort()
+                      .map((cls) => (
+                        <option key={cls} value={cls}>
+                          Kelas: {cls}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                {/* 3. Nomor / Nama Ruang Ujian */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Nomor / Nama Ruang Ujian
+                  </label>
+                  <input
+                    type="text"
+                    value={ruangUjianInput}
+                    onChange={(e) => setRuangUjianInput(e.target.value)}
+                    placeholder="Contoh: Ruang 01 (Lab Komputer A)"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* 4. Filter Status Siswa */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Filter Status Kehadiran Siswa
+                  </label>
+                  <select
+                    value={studentStatusFilter}
+                    onChange={(e) =>
+                      setStudentStatusFilter(e.target.value as 'ALL' | 'ACTIVE' | 'INACTIVE')
+                    }
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  >
+                    <option value="ACTIVE">Hanya Siswa Aktif (Hadir Ujian)</option>
+                    <option value="ALL">Semua Siswa (Aktif & Non-Aktif)</option>
+                    <option value="INACTIVE">Hanya Siswa Non-Aktif (Tidak Hadir)</option>
+                  </select>
+                </div>
+
+                {/* 5. Nama Pengawas Ruang 1 */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Nama Pengawas Ruang 1
+                  </label>
+                  <input
+                    type="text"
+                    value={pengawas1Input}
+                    onChange={(e) => setPengawas1Input(e.target.value)}
+                    placeholder="Nama Pengawas 1 & Gelar"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* 6. Nama Pengawas Ruang 2 */}
+                <div>
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Nama Pengawas Ruang 2
+                  </label>
+                  <input
+                    type="text"
+                    value={pengawas2Input}
+                    onChange={(e) => setPengawas2Input(e.target.value)}
+                    placeholder="Nama Pengawas 2 & Gelar"
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* 7. Catatan Kejadian Khusus */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-bold uppercase text-slate-600 mb-1">
+                    Catatan Kejadian Khusus Selama Ujian
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={catatanKejadian}
+                    onChange={(e) => setCatatanKejadian(e.target.value)}
+                    placeholder="Misal: Ujian berjalan tertib, aman, dan lancar. 1 siswa izin sakit."
+                    className="w-full bg-white border border-slate-300 rounded-xl p-2.5 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* 8. Checkboxes Lampiran */}
+                <div className="md:col-span-2 flex flex-wrap gap-4 pt-1 border-t border-slate-200">
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeDaftarHadir}
+                      onChange={(e) => setIncludeDaftarHadir(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span>Sertakan Lampiran Presensi / Daftar Hadir Siswa (Lengkap Paraf)</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={includeKartuToken}
+                      onChange={(e) => setIncludeKartuToken(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span>Sertakan Slip Kartu Token Ujian Per Sesi</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Statistical Badges */}
+              {(() => {
+                const totalList = config.students || [];
+                const filteredByClass = totalList.filter(
+                  (s) => selectedKelasFilter === 'ALL' || s.kelas === selectedKelasFilter
+                );
+                const activeCount = filteredByClass.filter((s) => s.isActive !== false).length;
+                const inactiveCount = filteredByClass.filter((s) => s.isActive === false).length;
+
+                return (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-3 text-center">
+                      <div className="text-xl font-black text-blue-800">{filteredByClass.length}</div>
+                      <div className="text-[10px] font-bold text-blue-600 uppercase">Siswa Terdaftar</div>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3 text-center">
+                      <div className="text-xl font-black text-emerald-800">{activeCount}</div>
+                      <div className="text-[10px] font-bold text-emerald-600 uppercase">Siswa Aktif (Hadir)</div>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-center">
+                      <div className="text-xl font-black text-red-800">{inactiveCount}</div>
+                      <div className="text-[10px] font-bold text-red-600 uppercase">Siswa Non-Aktif (Absen)</div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Table Pratinjau Siswa Aktif */}
+              <div>
+                <h4 className="font-extrabold text-xs text-slate-700 uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>Pratinjau Rincian Siswa yang Dicetak:</span>
+                  <span className="text-[11px] bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full font-bold">
+                    {
+                      (config.students || []).filter((s) => {
+                        if (selectedKelasFilter !== 'ALL' && s.kelas !== selectedKelasFilter)
+                          return false;
+                        if (studentStatusFilter === 'ACTIVE' && s.isActive === false) return false;
+                        if (studentStatusFilter === 'INACTIVE' && s.isActive !== false) return false;
+                        return true;
+                      }).length
+                    }{' '}
+                    Siswa Terpilih
+                  </span>
+                </h4>
+
+                <div className="border border-slate-200 rounded-2xl overflow-hidden max-h-56 overflow-y-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-slate-100 sticky top-0 text-slate-700 font-extrabold uppercase border-b border-slate-200">
+                      <tr>
+                        <th className="p-2.5 text-center w-10">No</th>
+                        <th className="p-2.5">NIS / No. Peserta</th>
+                        <th className="p-2.5">Nama Siswa</th>
+                        <th className="p-2.5">Kelas</th>
+                        <th className="p-2.5 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                      {(config.students || [])
+                        .filter((s) => {
+                          if (selectedKelasFilter !== 'ALL' && s.kelas !== selectedKelasFilter)
+                            return false;
+                          if (studentStatusFilter === 'ACTIVE' && s.isActive === false) return false;
+                          if (studentStatusFilter === 'INACTIVE' && s.isActive !== false) return false;
+                          return true;
+                        })
+                        .map((st, i) => (
+                          <tr key={st.id || i} className="hover:bg-slate-50">
+                            <td className="p-2 text-center font-bold text-slate-500">{i + 1}</td>
+                            <td className="p-2 font-mono font-bold">{st.nis}</td>
+                            <td className="p-2 font-bold text-slate-800">{st.nama}</td>
+                            <td className="p-2">{st.kelas}</td>
+                            <td className="p-2 text-center">
+                              {st.isActive !== false ? (
+                                <span className="bg-emerald-100 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                                  AKTIF
+                                </span>
+                              ) : (
+                                <span className="bg-red-100 text-red-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                                  NON-AKTIF
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowBeritaAcaraModal(false)}
+                className="px-4 py-2.5 text-slate-600 hover:bg-slate-200 rounded-xl font-bold text-xs transition cursor-pointer"
+              >
+                Tutup
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBeritaAcaraModal(false);
+                  handlePrintFullBeritaAcara();
+                }}
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white rounded-xl font-black text-xs transition shadow-md flex items-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Printer className="w-4 h-4 text-white" />
+                <span>Cetak Berita Acara & Presensi (A4)</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
