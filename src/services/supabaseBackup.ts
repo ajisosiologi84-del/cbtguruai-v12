@@ -1,6 +1,41 @@
 import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase';
 import { StudentUser, TeacherUser, AdminUser } from '../types';
 
+/**
+ * Safely parses any date/timestamp string format (including Indonesian locale strings like "14/9/2026, 10.15.24")
+ * into a valid ISO 8601 string acceptable by PostgreSQL TIMESTAMPTZ.
+ */
+export const parseToIsoTimestamp = (input?: string): string => {
+  if (!input || typeof input !== 'string' || !input.trim()) {
+    return new Date().toISOString();
+  }
+  const str = input.trim();
+
+  // Try standard JS Date parsing first
+  const standardDate = new Date(str);
+  if (!isNaN(standardDate.getTime())) {
+    return standardDate.toISOString();
+  }
+
+  // Handle Indonesian / localized strings e.g. "14/9/2026, 10.15.24" or "14/09/2026 10:15:24"
+  const match = str.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})(?:[,\s]+(\d{1,2})[\.\:](\d{1,2})(?:[\.\:](\d{1,2}))?)?/);
+  if (match) {
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10) - 1;
+    const year = parseInt(match[3], 10);
+    const hour = match[4] ? parseInt(match[4], 10) : 0;
+    const min = match[5] ? parseInt(match[5], 10) : 0;
+    const sec = match[6] ? parseInt(match[6], 10) : 0;
+
+    const parsedUtc = new Date(Date.UTC(year, month, day, hour, min, sec));
+    if (!isNaN(parsedUtc.getTime())) {
+      return parsedUtc.toISOString();
+    }
+  }
+
+  return new Date().toISOString();
+};
+
 export interface SupabaseSyncResult {
   success: boolean;
   message: string;
@@ -195,7 +230,7 @@ export const backupAdminsToSupabase = async (
       nama: a.nama,
       password: a.password || '',
       role: a.role || 'admin',
-      created_at: a.createdAt || new Date().toISOString(),
+      created_at: parseToIsoTimestamp(a.createdAt),
     }));
 
     const { error } = await client
