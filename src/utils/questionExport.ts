@@ -128,9 +128,23 @@ export function generateQuestionDocumentHtml(
 
     /* KOP NASKAH UJIAN */
     .kop-header {
-      text-align: center;
-      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
       margin-bottom: 5px;
+    }
+
+    .kop-logo {
+      height: 72px;
+      width: auto;
+      object-fit: contain;
+      flex-shrink: 0;
+    }
+
+    .kop-text-box {
+      flex: 1;
+      text-align: center;
     }
 
     .kop-dinas {
@@ -363,14 +377,39 @@ export function generateQuestionDocumentHtml(
 
     @media print {
       body {
-        background: none;
+        background: #fff !important;
+        color: #000 !important;
+        font-size: ${fontSize};
       }
       .no-print {
         display: none !important;
       }
       .container {
-        padding: 0;
-        max-width: 100%;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        box-shadow: none !important;
+      }
+      .question-item {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .section-header {
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      .page-break {
+        page-break-before: always !important;
+        break-before: page !important;
+      }
+      .signature-table {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      img {
+        max-width: 100% !important;
       }
     }
   </style>
@@ -378,32 +417,36 @@ export function generateQuestionDocumentHtml(
 <body>
 
   <!-- Floating Print Bar for Preview -->
-  <div class="no-print" style="position: fixed; top: 0; left: 0; right: 0; background: #1e293b; color: #fff; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 99999; font-family: sans-serif;">
+  <div class="no-print" style="position: fixed; top: 0; left: 0; right: 0; background: #0f172a; color: #fff; padding: 12px 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 99999; font-family: system-ui, -apple-system, sans-serif;">
     <div style="display: flex; align-items: center; gap: 12px;">
       <span style="font-weight: bold; font-size: 14px;">📄 Pratinjau Dokumen Naskah Soal Standar Nasional</span>
-      <span style="background: #334155; padding: 3px 8px; border-radius: 4px; font-size: 12px;">${questions.length} Soal</span>
+      <span style="background: #1e293b; padding: 3px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; color: #38bdf8;">${questions.length} Soal</span>
     </div>
     <div style="display: flex; gap: 10px;">
-      <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer;">
+      <button onclick="window.print()" style="background: #2563eb; color: white; border: none; padding: 8px 18px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">
         🖨️ Cetak / Simpan PDF
       </button>
-      <button onclick="window.close()" style="background: #475569; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer;">
+      <button onclick="window.close()" style="background: #334155; color: white; border: none; padding: 8px 18px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">
         ❌ Tutup
       </button>
     </div>
   </div>
 
-  <div class="container" style="margin-top: 50px;">
+  <div class="container" style="margin-top: 52px;">
 
     ${
       showKop
         ? `
     <!-- KOP SEKOLAH -->
     <div class="kop-header">
-      <div class="kop-dinas">${dinas}</div>
-      <div class="kop-sekolah">${schoolName}</div>
-      <div class="kop-alamat">${alamat}</div>
-      <div class="kop-alamat">${teleponWeb}</div>
+      ${kopSekolah?.logoPemda ? `<img src="${kopSekolah.logoPemda}" class="kop-logo" alt="Logo Pemda" />` : '<div style="width:72px;"></div>'}
+      <div class="kop-text-box">
+        <div class="kop-dinas">${dinas}</div>
+        <div class="kop-sekolah">${schoolName}</div>
+        <div class="kop-alamat">${alamat}</div>
+        <div class="kop-alamat">${teleponWeb}</div>
+      </div>
+      ${kopSekolah?.logoSekolah ? `<img src="${kopSekolah.logoSekolah}" class="kop-logo" alt="Logo Sekolah" />` : '<div style="width:72px;"></div>'}
     </div>
     <div class="kop-divider"></div>
     `
@@ -676,17 +719,28 @@ export function generateQuestionDocumentHtml(
     <!-- LEMBAR PENGESAHAN / TANDA TANGAN -->
     <table class="signature-table">
       <tr>
-        <td>
+        <td style="width: 50%;">
           <div>Mengetahui,</div>
           <div style="font-weight: bold;">Kepala ${schoolName}</div>
-          <div class="signature-space"></div>
+          <div class="signature-space" style="position: relative; height: 75px; display: flex; align-items: center; justify-content: center; margin: 4px 0;">
+            ${
+              kopSekolah?.showTtd && kopSekolah?.ttdKepalaSekolah
+                ? `<img src="${kopSekolah.ttdKepalaSekolah}" style="max-height: 70px; width: auto; object-fit: contain; z-index: 2;" alt="TTD Kepala Sekolah" />`
+                : ''
+            }
+            ${
+              kopSekolah?.showStempel && kopSekolah?.stempelSekolah
+                ? `<img src="${kopSekolah.stempelSekolah}" style="max-height: 70px; width: auto; object-fit: contain; position: absolute; opacity: ${kopSekolah.stempelOpacity || 0.85}; z-index: 1;" alt="Stempel" />`
+                : ''
+            }
+          </div>
           <div style="font-weight: bold; text-decoration: underline;">${headmasterName}</div>
           <div>NIP. ${headmasterNip}</div>
         </td>
-        <td>
+        <td style="width: 50%;">
           <div>${kotaTanggal}</div>
           <div style="font-weight: bold;">Guru Mata Pelajaran</div>
-          <div class="signature-space"></div>
+          <div class="signature-space" style="height: 75px;"></div>
           <div style="font-weight: bold; text-decoration: underline;">${guruName}</div>
           <div>NIP. ${guruNip}</div>
         </td>
@@ -707,6 +761,112 @@ export function generateQuestionDocumentHtml(
 function renderSingleQuestionHtml(q: Question, num: number, showKeyInline: boolean): string {
   const qText = cleanQuestionText(q.question);
   const options = q.options || [];
+  const imgPos = q.imagePosition || 'top';
+
+  const qImgs = q.images && Array.isArray(q.images) && q.images.length > 0
+    ? q.images.filter(Boolean)
+    : (q.image && q.image.trim() ? [q.image.trim()] : []);
+
+  const imgBlockHtml = qImgs.length > 0
+    ? `
+    <div class="question-image-block" style="margin-top:6px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:10px;">
+      ${qImgs.map((src, i) => `<img src="${src}" alt="Gambar Soal ${num}-${i+1}" style="max-height:250px;max-width:100%;object-fit:contain;border-radius:6px;border:1px solid #cbd5e1;padding:2px;background:#fff;" />`).join('')}
+    </div>
+    `
+    : '';
+
+  // Render question body based on imagePosition
+  let bodyContentHtml = '';
+  if (imgPos === 'bottom') {
+    bodyContentHtml = `<div class="question-text">${qText}</div>${imgBlockHtml}`;
+  } else if (imgPos === 'middle') {
+    const parts = qText.split(/(<\/p>|<br\s*\/?>|\n\n)/i).filter(Boolean);
+    if (parts.length > 2) {
+      const mid = Math.floor(parts.length / 2);
+      bodyContentHtml = `
+        <div class="question-text">${parts.slice(0, mid).join('')}</div>
+        ${imgBlockHtml}
+        <div class="question-text">${parts.slice(mid).join('')}</div>
+      `;
+    } else {
+      bodyContentHtml = `${imgBlockHtml}<div class="question-text">${qText}</div>`;
+    }
+  } else {
+    // top
+    bodyContentHtml = `${imgBlockHtml}<div class="question-text">${qText}</div>`;
+  }
+
+  // Category Statements table if present
+  let categoryTableHtml = '';
+  if ((q.bentukSoal || '').toLowerCase().includes('kategori') || (q.categoryStatements && q.categoryStatements.length > 0)) {
+    const statements = q.categoryStatements || [];
+    categoryTableHtml = `
+    <table style="width: 100%; border-collapse: collapse; margin-top: 8px; margin-bottom: 8px; font-size: 9.5pt;">
+      <thead>
+        <tr style="background-color: #f1f5f9; text-align: left;">
+          <th style="border: 1px solid #000; padding: 4px 8px; width: 30px; text-align: center;">No</th>
+          <th style="border: 1px solid #000; padding: 4px 8px;">Pernyataan</th>
+          <th style="border: 1px solid #000; padding: 4px 8px; width: 150px; text-align: center;">${showKeyInline ? 'Kunci Jawaban' : 'Pilihan Kategori'}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${statements.map((st, sIdx) => `
+          <tr>
+            <td style="border: 1px solid #000; padding: 4px 8px; text-align: center; font-weight: bold;">${sIdx + 1}</td>
+            <td style="border: 1px solid #000; padding: 4px 8px;">${st.statement}</td>
+            <td style="border: 1px solid #000; padding: 4px 8px; text-align: center; font-weight: bold;">
+              ${showKeyInline ? `<span style="color: #15803d; background: #dcfce7; padding: 2px 6px; border-radius: 4px;">✓ ${st.correctCategory}</span>` : '[ &nbsp; ] Benar &nbsp; [ &nbsp; ] Salah'}
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+    `;
+  }
+
+  // Standard Options table
+  let optionsTableHtml = '';
+  if (options.length > 0 && !categoryTableHtml) {
+    optionsTableHtml = `
+    <table class="options-table">
+      ${options
+        .map((opt) => {
+          const isKey = showKeyInline && opt.isCorrect;
+          return `
+        <tr class="option-row">
+          <td class="option-letter" style="${isKey ? 'color: #16a34a; font-weight: bold;' : ''}">${opt.id}.</td>
+          <td class="option-text" style="${isKey ? 'color: #15803d; font-weight: bold;' : ''}">
+            ${cleanQuestionText(opt.text)} ${isKey ? '✓ (Kunci)' : ''}
+            ${opt.image ? `<div style="margin-top:4px;"><img src="${opt.image}" style="max-height:160px;max-width:100%;object-fit:contain;border-radius:6px;border:1px solid #cbd5e1;padding:2px;" /></div>` : ''}
+          </td>
+        </tr>
+        `;
+        })
+        .join('')}
+    </table>
+    `;
+  }
+
+  // Explanation section
+  let explanationHtml = '';
+  if (showKeyInline) {
+    const expImgs = q.explanationImages && Array.isArray(q.explanationImages) && q.explanationImages.length > 0
+      ? q.explanationImages.filter(Boolean)
+      : (q.explanationImage && q.explanationImage.trim() ? [q.explanationImage.trim()] : []);
+
+    if (q.explanation || expImgs.length > 0) {
+      explanationHtml = `
+      <div style="margin-top: 8px; padding: 8px 12px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; font-size: 9.5pt; color: #166534;">
+        ${q.explanation ? `<div><b>Pembahasan:</b> ${cleanQuestionText(q.explanation)}</div>` : ''}
+        ${expImgs.length > 0 ? `
+          <div style="margin-top: 6px; display: flex; flex-wrap: wrap; gap: 8px;">
+            ${expImgs.map((src) => `<img src="${src}" style="max-height: 180px; max-width: 100%; object-fit: contain; border-radius: 4px; border: 1px solid #86efac; background: #fff;" />`).join('')}
+          </div>
+        ` : ''}
+      </div>
+      `;
+    }
+  }
 
   return `
   <div class="question-item">
@@ -714,54 +874,10 @@ function renderSingleQuestionHtml(q: Question, num: number, showKeyInline: boole
       <tr>
         <td class="question-num">${num}.</td>
         <td class="question-body">
-          <div class="question-text">${qText}</div>
-
-          ${
-            (() => {
-              const qImgs = q.images && Array.isArray(q.images) && q.images.length > 0
-                ? q.images.filter(Boolean)
-                : (q.image && q.image.trim() ? [q.image.trim()] : []);
-              if (qImgs.length === 0) return '';
-              return `
-          <div class="question-image-block" style="margin-top:8px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:10px;">
-            ${qImgs.map((src, i) => `<img src="${src}" alt="Gambar Soal ${num}-${i+1}" style="max-height:260px;max-width:100%;object-fit:contain;border-radius:6px;border:1px solid #e2e8f0;padding:2px;" />`).join('')}
-          </div>
-          `;
-            })()
-          }
-
-          ${
-            options.length > 0
-              ? `
-          <table class="options-table">
-            ${options
-              .map((opt) => {
-                const isKey = showKeyInline && opt.isCorrect;
-                return `
-              <tr class="option-row">
-                <td class="option-letter" style="${isKey ? 'color: #16a34a; font-weight: bold;' : ''}">${opt.id}.</td>
-                <td class="option-text" style="${isKey ? 'color: #15803d; font-weight: bold;' : ''}">
-                  ${cleanQuestionText(opt.text)} ${isKey ? '✓ (Kunci)' : ''}
-                  ${opt.image ? `<div style="margin-top:4px;"><img src="${opt.image}" style="max-height:160px;max-width:100%;object-fit:contain;border-radius:6px;border:1px solid #e2e8f0;" /></div>` : ''}
-                </td>
-              </tr>
-              `;
-              })
-              .join('')}
-          </table>
-          `
-              : ''
-          }
-
-          ${
-            showKeyInline && q.explanation
-              ? `
-          <div style="margin-top: 6px; padding: 6px 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; font-size: 9.5pt; color: #166534;">
-            <b>Pembahasan:</b> ${cleanQuestionText(q.explanation)}
-          </div>
-          `
-              : ''
-          }
+          ${bodyContentHtml}
+          ${categoryTableHtml}
+          ${optionsTableHtml}
+          ${explanationHtml}
         </td>
       </tr>
     </table>
