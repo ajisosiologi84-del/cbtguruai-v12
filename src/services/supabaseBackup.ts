@@ -62,8 +62,13 @@ ALTER TABLE master_teachers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE master_admins ENABLE ROW LEVEL SECURITY;
 
 -- Kebijakan Akses Publik (Anon Key Read/Write)
+DROP POLICY IF EXISTS "Allow anon read write on master_students" ON master_students;
 CREATE POLICY "Allow anon read write on master_students" ON master_students FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon read write on master_teachers" ON master_teachers;
 CREATE POLICY "Allow anon read write on master_teachers" ON master_teachers FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon read write on master_admins" ON master_admins;
 CREATE POLICY "Allow anon read write on master_admins" ON master_admins FOR ALL USING (true) WITH CHECK (true);
 `;
 };

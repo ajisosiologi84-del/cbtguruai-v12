@@ -74,11 +74,12 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ questions, answers, onEx
                 </div>
 
                 {(() => {
+                  const imgPos = q.imagePosition || 'top';
                   const qImages = q.images && Array.isArray(q.images) && q.images.length > 0
                     ? q.images.filter(Boolean)
                     : (q.image?.trim() ? [q.image.trim()] : []);
-                  if (qImages.length === 0) return null;
-                  return (
+
+                  const renderImageBlock = () => (
                     <div className={`mb-5 grid gap-3 ${qImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
                       {qImages.map((imgSrc, idx) => (
                         <div key={idx} className="flex justify-center bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -91,12 +92,77 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ questions, answers, onEx
                       ))}
                     </div>
                   );
+
+                  const formattedHtml = formatQuestionText(q.question);
+
+                  if (qImages.length === 0) {
+                    return (
+                      <div
+                        className="text-gray-800 mb-6 font-medium text-base sm:text-lg leading-relaxed overflow-x-auto"
+                        dangerouslySetInnerHTML={{ __html: formattedHtml }}
+                      />
+                    );
+                  }
+
+                  if (imgPos === 'top') {
+                    return (
+                      <div className="mb-6 space-y-4">
+                        {renderImageBlock()}
+                        <div
+                          className="text-gray-800 font-medium text-base sm:text-lg leading-relaxed overflow-x-auto"
+                          dangerouslySetInnerHTML={{ __html: formattedHtml }}
+                        />
+                      </div>
+                    );
+                  }
+
+                  if (imgPos === 'middle') {
+                    const parts = formattedHtml.split(/(<\/p>|<br\s*\/?>|\n\n)/i).filter(Boolean);
+                    if (parts.length > 2) {
+                      const midIndex = Math.floor(parts.length / 2);
+                      const firstHalf = parts.slice(0, midIndex).join('');
+                      const secondHalf = parts.slice(midIndex).join('');
+                      return (
+                        <div className="mb-6 space-y-4">
+                          <div
+                            className="text-gray-800 font-medium text-base sm:text-lg leading-relaxed overflow-x-auto"
+                            dangerouslySetInnerHTML={{ __html: firstHalf }}
+                          />
+                          {renderImageBlock()}
+                          <div
+                            className="text-gray-800 font-medium text-base sm:text-lg leading-relaxed overflow-x-auto"
+                            dangerouslySetInnerHTML={{ __html: secondHalf }}
+                          />
+                        </div>
+                      );
+                    }
+                  }
+
+                  return (
+                    <div className="mb-6 space-y-4">
+                      <div
+                        className="text-gray-800 font-medium text-base sm:text-lg leading-relaxed overflow-x-auto"
+                        dangerouslySetInnerHTML={{ __html: formattedHtml }}
+                      />
+                      {renderImageBlock()}
+                    </div>
+                  );
                 })()}
 
-                <div
-                  className="text-gray-800 mb-6 font-medium text-base sm:text-lg leading-relaxed overflow-x-auto"
-                  dangerouslySetInnerHTML={{ __html: formatQuestionText(q.question) }}
-                />
+                {/* Option Images if present */}
+                {q.options && q.options.some((opt) => opt.image) && (
+                  <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                    <p className="col-span-full text-xs font-bold text-slate-500 uppercase tracking-wider">Lampiran Gambar Opsi Pilihan:</p>
+                    {q.options.map((opt) =>
+                      opt.image ? (
+                        <div key={opt.id} className="flex items-center gap-3 bg-white p-2.5 rounded-xl border border-slate-200">
+                          <span className="font-extrabold text-sm text-indigo-600 bg-indigo-50 w-7 h-7 flex items-center justify-center rounded-lg">{opt.id}</span>
+                          <img src={opt.image} alt={`Opsi ${opt.id}`} className="max-h-24 w-auto object-contain rounded-lg border border-slate-100" />
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                )}
 
                 <div className="bg-slate-50 rounded-xl p-4 mb-5 border border-slate-200 space-y-3">
                   <div>
@@ -118,13 +184,34 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ questions, answers, onEx
                   </div>
                 </div>
 
-                <div className="bg-amber-50 rounded-xl p-5 border border-amber-200">
-                  <p className="font-bold text-amber-900 mb-2 flex items-center gap-2 text-sm">
+                <div className="bg-amber-50 rounded-xl p-5 border border-amber-200 space-y-3">
+                  <p className="font-bold text-amber-900 flex items-center gap-2 text-sm">
                     <Microscope className="w-4 h-4 text-amber-600" /> Pembahasan Analisis HOTS
                   </p>
-                  <p className="text-sm text-amber-950 leading-relaxed">
+                  <p className="text-sm text-amber-950 leading-relaxed font-medium">
                     {q.explanation || 'Belum ada pembahasan.'}
                   </p>
+                  {/* Lampiran Gambar Pembahasan */}
+                  {(() => {
+                    const expImgs: string[] = Array.isArray(q.explanationImages) && q.explanationImages.length > 0
+                      ? q.explanationImages.filter((img) => typeof img === 'string' && img.trim() !== '')
+                      : (q.explanationImage && q.explanationImage.trim() ? [q.explanationImage.trim()] : []);
+                    
+                    if (expImgs.length === 0) return null;
+
+                    return (
+                      <div className="pt-3 border-t border-amber-200/80 space-y-2">
+                        <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Lampiran Gambar Pembahasan:</p>
+                        <div className={`grid gap-3 ${expImgs.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                          {expImgs.map((img, idx) => (
+                            <div key={idx} className="bg-white p-2.5 rounded-xl border border-amber-200 shadow-2xs flex justify-center items-center">
+                              <img src={img} alt={`Gambar Pembahasan #${idx + 1}`} className="max-h-80 w-auto object-contain rounded-lg" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             );

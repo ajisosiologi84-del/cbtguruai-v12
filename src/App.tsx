@@ -701,6 +701,7 @@ export default function App() {
         id: labels[i],
         text: opt.text,
         isCorrect: opt.isCorrect,
+        image: opt.image,
       }));
       return {
         ...q,
@@ -1121,6 +1122,8 @@ export default function App() {
     question: string;
     options: Option[];
     explanation: string;
+    explanationImage?: string;
+    explanationImages?: string[];
     image?: string;
     images?: string[];
     imagePosition?: 'top' | 'middle' | 'bottom';
@@ -1146,6 +1149,8 @@ export default function App() {
           question: qData.question,
           options: qData.options,
           explanation: qData.explanation,
+          explanationImage: qData.explanationImage,
+          explanationImages: qData.explanationImages,
           image: qData.image,
           images: qData.images,
           imagePosition: qData.imagePosition,
@@ -1167,6 +1172,8 @@ export default function App() {
         question: qData.question,
         options: qData.options,
         explanation: qData.explanation,
+        explanationImage: qData.explanationImage,
+        explanationImages: qData.explanationImages,
         image: qData.image,
         images: qData.images,
         imagePosition: qData.imagePosition,

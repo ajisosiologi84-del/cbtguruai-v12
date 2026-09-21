@@ -13,6 +13,8 @@ interface QuestionEditorModalProps {
     question: string;
     options: Option[];
     explanation: string;
+    explanationImage?: string;
+    explanationImages?: string[];
     image?: string;
     images?: string[];
     imagePosition?: 'top' | 'middle' | 'bottom';
@@ -42,6 +44,7 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
 }) => {
   const [questionText, setQuestionText] = useState('');
   const [explanationText, setExplanationText] = useState('');
+  const [explanationImages, setExplanationImages] = useState<string[]>([]);
   const [selectedMapel, setSelectedMapel] = useState<string>(defaultMapel);
   const [kompetensiText, setKompetensiText] = useState<string>('');
   const [subTopikText, setSubTopikText] = useState<string>('');
@@ -70,6 +73,15 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
     if (editingQuestion) {
       setQuestionText(editingQuestion.question);
       setExplanationText(editingQuestion.explanation || '');
+      
+      let expImgs: string[] = [];
+      if (editingQuestion.explanationImages && Array.isArray(editingQuestion.explanationImages) && editingQuestion.explanationImages.length > 0) {
+        expImgs = editingQuestion.explanationImages.filter((img) => typeof img === 'string' && img.trim() !== '');
+      } else if (editingQuestion.explanationImage && editingQuestion.explanationImage.trim()) {
+        expImgs = [editingQuestion.explanationImage.trim()];
+      }
+      setExplanationImages(expImgs);
+
       setSelectedMapel(editingQuestion.mapel || defaultMapel);
       const komp = editingQuestion.kompetensi || editingQuestion.subTopik || '';
       setKompetensiText(komp);
@@ -126,6 +138,7 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
     } else {
       setQuestionText('');
       setExplanationText('');
+      setExplanationImages([]);
       setSelectedMapel(defaultMapel);
       setKompetensiText('');
       setSubTopikText('');
@@ -257,6 +270,86 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
 
   const handleRemoveQuestionImage = (index: number) => {
     setQuestionImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleExplanationImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const validFiles: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (!file.type.startsWith('image/')) {
+        showAlert(`File ${file.name} bukan format gambar!`);
+        continue;
+      }
+      if (file.size > 8 * 1024 * 1024) {
+        showAlert(`Ukuran gambar ${file.name} terlalu besar (> 8 MB)!`);
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) return;
+
+    let processedCount = 0;
+    const newCompressedList: string[] = [];
+
+    validFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const rawResult = event.target?.result as string;
+        if (rawResult) {
+          const img = new Image();
+          img.onload = () => {
+            const maxDim = 900;
+            let width = img.width;
+            let height = img.height;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressed = canvas.toDataURL('image/jpeg', 0.82);
+              newCompressedList.push(compressed);
+            } else {
+              newCompressedList.push(rawResult);
+            }
+            processedCount++;
+            if (processedCount === validFiles.length) {
+              setExplanationImages((prev) => [...prev, ...newCompressedList]);
+              showAlert(`${validFiles.length} gambar pembahasan berhasil diunggah!`);
+            }
+          };
+          img.onerror = () => {
+            newCompressedList.push(rawResult);
+            processedCount++;
+            if (processedCount === validFiles.length) {
+              setExplanationImages((prev) => [...prev, ...newCompressedList]);
+              showAlert(`${validFiles.length} gambar pembahasan berhasil diunggah!`);
+            }
+          };
+          img.src = rawResult;
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+
+    e.target.value = '';
+  };
+
+  const handleRemoveExplanationImage = (index: number) => {
+    setExplanationImages((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleMoveQuestionImage = (index: number, direction: 'left' | 'right') => {
@@ -414,6 +507,8 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
         question: formatQuestionText(trimmedQuestion),
         options: [],
         explanation: explanationText.trim() || 'Tidak ada pembahasan.',
+        explanationImage: explanationImages.length > 0 ? explanationImages[0] : undefined,
+        explanationImages: explanationImages.length > 0 ? explanationImages : undefined,
         image: questionImages.length > 0 ? questionImages[0] : undefined,
         images: questionImages.length > 0 ? questionImages : undefined,
         imagePosition: questionImages.length > 0 ? imagePosition : undefined,
@@ -460,6 +555,8 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
       question: formatQuestionText(trimmedQuestion),
       options,
       explanation: explanationText.trim() || 'Tidak ada pembahasan.',
+      explanationImage: explanationImages.length > 0 ? explanationImages[0] : undefined,
+      explanationImages: explanationImages.length > 0 ? explanationImages : undefined,
       image: questionImages.length > 0 ? questionImages[0] : undefined,
       images: questionImages.length > 0 ? questionImages : undefined,
       imagePosition: questionImages.length > 0 ? imagePosition : undefined,
@@ -1105,15 +1202,52 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
             )}
 
             <div>
-              <label className="block font-bold text-gray-800 mb-2 text-sm">
-                Pembahasan Ilmiah (Analisis HOTS)
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block font-bold text-gray-800 text-sm">
+                  Pembahasan Ilmiah (Analisis HOTS)
+                </label>
+                <label className="relative cursor-pointer inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white text-xs font-black px-3 py-1.5 rounded-xl transition-all shadow-xs shrink-0 active:scale-95">
+                  <FileImage className="w-4 h-4 text-amber-200" />
+                  <span>Gambar Pembahasan</span>
+                  <span className="bg-amber-300 text-slate-900 text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider">✨ BARU</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleExplanationImagesUpload}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                </label>
+              </div>
               <textarea
                 value={explanationText}
                 onChange={(e) => setExplanationText(e.target.value)}
                 className="w-full border-2 border-gray-200 rounded-xl p-3 h-24 focus:border-blue-500 focus:outline-none resize-none text-sm transition-colors"
                 placeholder="Masukkan penjelasan mengapa jawaban tersebut benar..."
               />
+              {/* Preview Gambar Pembahasan */}
+              {explanationImages.length > 0 && (
+                <div className="mt-3 p-3 bg-amber-50/80 border border-amber-200 rounded-2xl space-y-2">
+                  <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-600" /> Lampiran Gambar Pembahasan ({explanationImages.length}):
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {explanationImages.map((img, idx) => (
+                      <div key={idx} className="relative group bg-white border border-amber-200 rounded-xl p-1.5 flex flex-col items-center justify-center">
+                        <img src={img} alt={`Gambar Pembahasan ${idx + 1}`} className="max-h-24 w-auto object-contain rounded-lg" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveExplanationImage(idx)}
+                          className="absolute top-1 right-1 p-1 bg-red-600 hover:bg-red-700 text-white rounded-lg opacity-90 hover:opacity-100 transition cursor-pointer shadow-xs"
+                          title="Hapus Gambar Pembahasan"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -1150,40 +1284,76 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
                 Pertanyaan
               </p>
 
-              {/* Lampiran Gambar Di Atas Teks */}
-              {questionImages.length > 0 && imagePosition === 'top' && (
-                <div className={`my-3 grid gap-3 ${questionImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
-                  {questionImages.map((src, i) => (
-                    <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-center">
-                      <img
-                        src={src}
-                        alt={`Lampiran Soal #${i + 1} (Atas)`}
-                        className="max-h-72 w-auto object-contain rounded-lg border border-slate-200"
+              {(() => {
+                const renderImgBlock = () => (
+                  <div className={`my-3 grid gap-3 ${questionImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                    {questionImages.map((src, i) => (
+                      <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-center">
+                        <img
+                          src={src}
+                          alt={`Lampiran Soal #${i + 1} (${imagePosition})`}
+                          className="max-h-72 w-auto object-contain rounded-lg border border-slate-200"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+
+                const formattedText = formatQuestionText(questionText) || '<i class="text-slate-400">(Teks pertanyaan belum diisi)</i>';
+
+                if (questionImages.length === 0) {
+                  return (
+                    <div
+                      className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                      dangerouslySetInnerHTML={{ __html: formattedText }}
+                    />
+                  );
+                }
+
+                if (imagePosition === 'top') {
+                  return (
+                    <div className="space-y-3">
+                      {renderImgBlock()}
+                      <div
+                        className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                        dangerouslySetInnerHTML={{ __html: formattedText }}
                       />
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                }
 
-              <div
-                className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
-                dangerouslySetInnerHTML={{ __html: formatQuestionText(questionText) || '<i class="text-slate-400">(Teks pertanyaan belum diisi)</i>' }}
-              />
+                if (imagePosition === 'middle') {
+                  const parts = formattedText.split(/(<\/p>|<br\s*\/?>|\n\n)/i).filter(Boolean);
+                  if (parts.length > 2) {
+                    const midIndex = Math.floor(parts.length / 2);
+                    const firstHalf = parts.slice(0, midIndex).join('');
+                    const secondHalf = parts.slice(midIndex).join('');
+                    return (
+                      <div className="space-y-3">
+                        <div
+                          className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                          dangerouslySetInnerHTML={{ __html: firstHalf }}
+                        />
+                        {renderImgBlock()}
+                        <div
+                          className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                          dangerouslySetInnerHTML={{ __html: secondHalf }}
+                        />
+                      </div>
+                    );
+                  }
+                }
 
-              {/* Lampiran Gambar Di Tengah / Di Bawah Teks */}
-              {questionImages.length > 0 && (imagePosition === 'middle' || imagePosition === 'bottom') && (
-                <div className={`my-3 grid gap-3 ${questionImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
-                  {questionImages.map((src, i) => (
-                    <div key={i} className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex justify-center">
-                      <img
-                        src={src}
-                        alt={`Lampiran Soal #${i + 1} (${imagePosition})`}
-                        className="max-h-72 w-auto object-contain rounded-lg border border-slate-200"
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
+                return (
+                  <div className="space-y-3">
+                    <div
+                      className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                      dangerouslySetInnerHTML={{ __html: formattedText }}
+                    />
+                    {renderImgBlock()}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Pilihan Jawaban Preview */}
@@ -1266,13 +1436,25 @@ export const QuestionEditorModal: React.FC<QuestionEditorModalProps> = ({
             </div>
 
             {/* Pembahasan */}
-            <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl space-y-1">
+            <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl space-y-2">
               <p className="text-xs font-extrabold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-amber-600" /> Pembahasan Soal
               </p>
               <p className="text-xs text-amber-950 leading-relaxed font-medium">
                 {explanationText || 'Tidak ada pembahasan.'}
               </p>
+              {explanationImages.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-amber-200/80 space-y-2">
+                  <p className="text-[11px] font-bold text-amber-800">Lampiran Gambar Pembahasan:</p>
+                  <div className={`grid gap-2 ${explanationImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                    {explanationImages.map((img, idx) => (
+                      <div key={idx} className="bg-white p-2 rounded-xl border border-amber-200 flex justify-center">
+                        <img src={img} alt={`Pembahasan ${idx + 1}`} className="max-h-56 w-auto object-contain rounded-lg" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

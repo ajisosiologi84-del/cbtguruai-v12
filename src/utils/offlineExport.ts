@@ -677,7 +677,8 @@ export function exportOfflineAppHtml(config: AppConfig): void {
           return {
             id: labels[idx] || opt.id,
             text: opt.text,
-            isCorrect: opt.isCorrect
+            isCorrect: opt.isCorrect,
+            image: opt.image
           };
         });
         return Object.assign({}, q, { options: mappedOpts });
@@ -738,19 +739,40 @@ export function exportOfflineAppHtml(config: AppConfig): void {
       const q = activeExamQuestions[activeQuestionIndex];
       qNumberBadge.textContent = 'Soal ' + (activeQuestionIndex + 1);
       qTotalBadge.textContent = 'Total ' + activeExamQuestions.length + ' Soal';
-      var imgHtml = q.image ? '<div style="margin-bottom:16px;text-align:center;background:#f8fafc;padding:10px;border-radius:12px;border:1px solid #e2e8f0;"><img src="' + q.image + '" style="max-height:300px;max-width:100%;object-fit:contain;border-radius:8px;" alt="Gambar Soal" /></div>' : '';
-      questionText.innerHTML = imgHtml + formatQuestionText(q.question);
+      var qImgs = (q.images && Array.isArray(q.images) && q.images.length > 0)
+        ? q.images.filter(Boolean)
+        : (q.image && String(q.image).trim() ? [String(q.image).trim()] : []);
+      
+      var imgHtml = '';
+      if (qImgs.length > 0) {
+        imgHtml = '<div style="margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px;justify-content:center;background:#f8fafc;padding:12px;border-radius:16px;border:1px solid #e2e8f0;">' +
+          qImgs.map(function(src) {
+            return '<img src="' + src + '" style="max-height:300px;max-width:100%;object-fit:contain;border-radius:8px;background:#fff;padding:4px;border:1px solid #cbd5e1;" alt="Gambar Soal" />';
+          }).join('') +
+          '</div>';
+      }
+
+      var formattedQText = formatQuestionText(q.question);
+      var imgPos = q.imagePosition || 'top';
+
+      if (imgPos === 'bottom') {
+        questionText.innerHTML = formattedQText + imgHtml;
+      } else {
+        questionText.innerHTML = imgHtml + formattedQText;
+      }
 
       optionsContainer.innerHTML = '';
       q.options.forEach((opt) => {
         const selected = userAnswers[activeQuestionIndex] === opt.id;
         const btn = document.createElement('button');
-        btn.className = 'w-full text-left p-3.5 rounded-xl border-2 transition-all flex items-center gap-3 text-sm font-semibold ' +
+        btn.className = 'w-full text-left p-3.5 rounded-xl border-2 transition-all flex flex-col gap-2 ' +
           (selected ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm' : 'border-slate-200 hover:border-slate-300 text-slate-800');
         
-        btn.innerHTML = '<span class="w-7 h-7 rounded-lg font-bold flex items-center justify-center shrink-0 ' +
+        var optImgHtml = opt.image ? '<div style="margin-left:36px;margin-top:4px;"><img src="' + opt.image + '" style="max-height:200px;max-width:100%;object-fit:contain;border-radius:8px;border:1px solid #e2e8f0;background:#fff;padding:2px;" alt="Opsi" /></div>' : '';
+
+        btn.innerHTML = '<div class="flex items-center gap-3"><span class="w-7 h-7 rounded-lg font-bold flex items-center justify-center shrink-0 ' +
           (selected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600') + '">' + opt.id + '</span>' +
-          '<span>' + opt.text + '</span>';
+          '<span class="font-semibold">' + opt.text + '</span></div>' + optImgHtml;
 
         btn.addEventListener('click', () => {
           userAnswers[activeQuestionIndex] = opt.id;

@@ -43,11 +43,12 @@ export const SupabaseBackupModal: React.FC<SupabaseBackupModalProps> = ({
   onRestoreUsers,
   showAlert = alert
 }) => {
+  const metaEnv = (import.meta as any)?.env || {};
   const [supabaseUrl, setSupabaseUrl] = useState<string>(
-    import.meta.env.VITE_SUPABASE_URL || localStorage.getItem('cbt_supabase_url') || ''
+    localStorage.getItem('cbt_supabase_url') || metaEnv.VITE_SUPABASE_URL || ''
   );
   const [supabaseAnonKey, setSupabaseAnonKey] = useState<string>(
-    import.meta.env.VITE_SUPABASE_ANON_KEY || localStorage.getItem('cbt_supabase_key') || ''
+    localStorage.getItem('cbt_supabase_key') || metaEnv.VITE_SUPABASE_ANON_KEY || ''
   );
 
   const [activeTab, setActiveTab] = useState<'sync' | 'config' | 'sql'>('sync');
@@ -59,7 +60,7 @@ export const SupabaseBackupModal: React.FC<SupabaseBackupModalProps> = ({
 
   const isConfigured = Boolean(
     supabaseUrl &&
-      supabaseUrl.includes('supabase.co') &&
+      supabaseUrl.startsWith('http') &&
       supabaseAnonKey &&
       supabaseAnonKey.length > 20
   );

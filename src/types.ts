@@ -16,6 +16,8 @@ export interface Question {
   question: string;
   options: Option[];
   explanation: string;
+  explanationImage?: string; // Base64 data URL or image URL for explanation image (single image)
+  explanationImages?: string[]; // Array of Base64 data URLs or image URLs for explanation images
   image?: string; // Base64 data URL or image URL for question image / table / diagram (legacy single image)
   images?: string[]; // Array of Base64 or image URLs for multiple question images
   imagePosition?: 'top' | 'middle' | 'bottom'; // Posisi Gambar Soal (default 'top')

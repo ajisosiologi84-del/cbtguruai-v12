@@ -717,13 +717,17 @@ function renderSingleQuestionHtml(q: Question, num: number, showKeyInline: boole
           <div class="question-text">${qText}</div>
 
           ${
-            q.image
-              ? `
-          <div class="question-image">
-            <img src="${q.image}" alt="Gambar Soal ${num}" />
+            (() => {
+              const qImgs = q.images && Array.isArray(q.images) && q.images.length > 0
+                ? q.images.filter(Boolean)
+                : (q.image && q.image.trim() ? [q.image.trim()] : []);
+              if (qImgs.length === 0) return '';
+              return `
+          <div class="question-image-block" style="margin-top:8px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:10px;">
+            ${qImgs.map((src, i) => `<img src="${src}" alt="Gambar Soal ${num}-${i+1}" style="max-height:260px;max-width:100%;object-fit:contain;border-radius:6px;border:1px solid #e2e8f0;padding:2px;" />`).join('')}
           </div>
-          `
-              : ''
+          `;
+            })()
           }
 
           ${
@@ -738,6 +742,7 @@ function renderSingleQuestionHtml(q: Question, num: number, showKeyInline: boole
                 <td class="option-letter" style="${isKey ? 'color: #16a34a; font-weight: bold;' : ''}">${opt.id}.</td>
                 <td class="option-text" style="${isKey ? 'color: #15803d; font-weight: bold;' : ''}">
                   ${cleanQuestionText(opt.text)} ${isKey ? '✓ (Kunci)' : ''}
+                  ${opt.image ? `<div style="margin-top:4px;"><img src="${opt.image}" style="max-height:160px;max-width:100%;object-fit:contain;border-radius:6px;border:1px solid #e2e8f0;" /></div>` : ''}
                 </td>
               </tr>
               `;

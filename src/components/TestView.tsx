@@ -421,19 +421,70 @@ export const TestView: React.FC<TestViewProps> = ({
                 </div>
               );
 
+              if (!hasImg) {
+                return (
+                  <div className="mb-6">
+                    <div
+                      className="text-sm sm:text-base md:text-lg text-gray-800 leading-relaxed font-medium overflow-x-auto"
+                      dangerouslySetInnerHTML={{ __html: formatQuestionText(currentQuestion?.question) }}
+                    />
+                  </div>
+                );
+              }
+
+              const formattedText = formatQuestionText(currentQuestion?.question);
+
+              if (imgPos === 'top') {
+                return (
+                  <div className="mb-6 space-y-4">
+                    {renderImageBlock()}
+                    <div
+                      className="text-sm sm:text-base md:text-lg text-gray-800 leading-relaxed font-medium overflow-x-auto"
+                      dangerouslySetInnerHTML={{ __html: formattedText }}
+                    />
+                  </div>
+                );
+              }
+
+              if (imgPos === 'middle') {
+                const parts = formattedText.split(/(<\/p>|<br\s*\/?>|\n\n)/i).filter(Boolean);
+                if (parts.length > 2) {
+                  const midIndex = Math.floor(parts.length / 2);
+                  const firstHalf = parts.slice(0, midIndex).join('');
+                  const secondHalf = parts.slice(midIndex).join('');
+                  return (
+                    <div className="mb-6 space-y-4">
+                      <div
+                        className="text-sm sm:text-base md:text-lg text-gray-800 leading-relaxed font-medium overflow-x-auto"
+                        dangerouslySetInnerHTML={{ __html: firstHalf }}
+                      />
+                      {renderImageBlock()}
+                      <div
+                        className="text-sm sm:text-base md:text-lg text-gray-800 leading-relaxed font-medium overflow-x-auto"
+                        dangerouslySetInnerHTML={{ __html: secondHalf }}
+                      />
+                    </div>
+                  );
+                }
+                return (
+                  <div className="mb-6 space-y-4">
+                    <div
+                      className="text-sm sm:text-base md:text-lg text-gray-800 leading-relaxed font-medium overflow-x-auto"
+                      dangerouslySetInnerHTML={{ __html: formattedText }}
+                    />
+                    {renderImageBlock()}
+                  </div>
+                );
+              }
+
+              // bottom
               return (
                 <div className="mb-6 space-y-4">
-                  {/* Gambar Di Atas Teks */}
-                  {hasImg && imgPos === 'top' && renderImageBlock()}
-
-                  {/* Teks Pertanyaan */}
                   <div
                     className="text-sm sm:text-base md:text-lg text-gray-800 leading-relaxed font-medium overflow-x-auto"
-                    dangerouslySetInnerHTML={{ __html: formatQuestionText(currentQuestion?.question) }}
+                    dangerouslySetInnerHTML={{ __html: formattedText }}
                   />
-
-                  {/* Gambar Di Tengah / Di Bawah Teks */}
-                  {hasImg && (imgPos === 'middle' || imgPos === 'bottom') && renderImageBlock()}
+                  {renderImageBlock()}
                 </div>
               );
             })()}

@@ -5531,29 +5531,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* TAB 2: MANAJEMEN USER (SISWA & GURU) */}
       {activeTab === 'students' && (
         <div className="flex-1 overflow-y-auto p-6 max-w-7xl mx-auto w-full flex flex-col gap-6">
-          {/* Sub Tab Switcher: Siswa, Guru & Admin (Superadmin Only) */}
-          {!loggedInTeacher && adminRole !== 'teacher' && (
-            <div className="bg-white p-2 rounded-2xl shadow-xs border border-gray-200 flex gap-2 w-full sm:w-auto self-start flex-wrap">
-              <button
-                onClick={() => setUserSubTab('student')}
-                className={`px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-                  userSubTab === 'student'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <Users className="w-4 h-4" /> Data Siswa ({displayStudentsList.length})
-              </button>
-              <button
-                onClick={() => setUserSubTab('teacher')}
-                className={`px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
-                  userSubTab === 'teacher'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                <GraduationCap className="w-4 h-4" /> Data Guru ({teachersList.length})
-              </button>
+          {/* Sub Tab Switcher: Siswa, Guru & Admin */}
+          <div className="bg-white p-2 rounded-2xl shadow-xs border border-gray-200 flex gap-2 w-full sm:w-auto self-start flex-wrap">
+            <button
+              onClick={() => setUserSubTab('student')}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
+                userSubTab === 'student'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Users className="w-4 h-4" /> Data Siswa ({displayStudentsList.length})
+            </button>
+            <button
+              onClick={() => setUserSubTab('teacher')}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
+                userSubTab === 'teacher'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <GraduationCap className="w-4 h-4" /> Data Guru ({teachersList.length})
+            </button>
+            {adminRole !== 'teacher' && (
               <button
                 onClick={() => setUserSubTab('admin')}
                 className={`px-5 py-2.5 rounded-xl font-bold text-xs transition-all flex items-center gap-2 cursor-pointer ${
@@ -5564,9 +5564,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 <Shield className="w-4 h-4" /> Data Admin ({adminsList.length})
               </button>
-              
-            </div>
-          )}
+            )}
+          </div>
 
           {(userSubTab === 'student' || loggedInTeacher || adminRole === 'teacher') ? (
             /* STUDENT MANAGEMENT UI */
@@ -5583,63 +5582,56 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </p>
                 </div>
 
-                {adminRole !== 'teacher' ? (
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={handleDownloadStudentTemplate}
-                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-4 h-4" /> Template Excel Siswa
-                    </button>
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={handleDownloadStudentTemplate}
+                    className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> Template Excel Siswa
+                  </button>
 
-                    <button
-                      onClick={() => studentFileInputRef.current?.click()}
-                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                    >
-                      <Upload className="w-4 h-4" /> Upload Excel Siswa
-                    </button>
+                  <button
+                    onClick={() => studentFileInputRef.current?.click()}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <Upload className="w-4 h-4" /> Upload Excel Siswa
+                  </button>
 
-                    <button
-                      onClick={() => setIsExamCardPrintModalOpen(true)}
-                      className="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                    >
-                      <Printer className="w-4 h-4" /> Cetak Kartu Ujian
-                    </button>
+                  <button
+                    onClick={() => setIsExamCardPrintModalOpen(true)}
+                    className="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4" /> Cetak Kartu Ujian
+                  </button>
 
-                    <button
-                      onClick={() => setIsAttendancePrintModalOpen(true)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                    >
-                      <FileCheck className="w-4 h-4 text-blue-100" /> Cetak Daftar Hadir
-                    </button>
+                  <button
+                    onClick={() => setIsAttendancePrintModalOpen(true)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <FileCheck className="w-4 h-4 text-blue-100" /> Cetak Daftar Hadir
+                  </button>
 
-                    <button
-                      onClick={() => setIsGoogleSheetsModalOpen(true)}
-                      className="bg-teal-700 hover:bg-teal-800 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                    >
-                      <FileSpreadsheet className="w-4 h-4 text-teal-200" /> Google Sheets (CRUD)
-                    </button>
+                  <button
+                    onClick={() => setIsGoogleSheetsModalOpen(true)}
+                    className="bg-teal-700 hover:bg-teal-800 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-teal-200" /> Google Sheets (CRUD)
+                  </button>
 
-                    <button
-                      onClick={() => setIsSupabaseBackupModalOpen(true)}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                    >
-                      <Database className="w-4 h-4 text-emerald-200" /> Backup Supabase (User)
-                    </button>
+                  <button
+                    onClick={() => setIsSupabaseBackupModalOpen(true)}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white px-3.5 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <Database className="w-4 h-4 text-emerald-200" /> Backup Supabase (User)
+                  </button>
 
-                    <button
-                      onClick={() => setIsAddStudentModalOpen(true)}
-                      className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
-                    >
-                      <UserPlus className="w-4 h-4" /> Tambah Siswa Manual
-                    </button>
-                  </div>
-                ) : (
-                  <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2">
-                    <Info className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span>Mode Guru / Pendidik: Penambahan & penghapusan akun siswa dikelola oleh Administrator Utama.</span>
-                  </div>
-                )}
+                  <button
+                    onClick={() => setIsAddStudentModalOpen(true)}
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                  >
+                    <UserPlus className="w-4 h-4" /> Tambah Siswa Manual
+                  </button>
+                </div>
               </div>
 
               {/* MENU PENETAPAN SISWA AKTIF UJIAN */}
@@ -8830,26 +8822,87 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </span>
               </div>
 
-              {/* Gambar / Tabel / Diagram terlampir jika ada */}
-              {previewQuestion.image && (
-                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex justify-center">
-                  <img
-                    src={previewQuestion.image}
-                    alt="Lampiran Soal"
-                    className="max-h-72 w-auto object-contain rounded-xl border border-slate-200 shadow-xs"
-                  />
-                </div>
-              )}
-
-              {/* Question Text */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80">
-                <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider mb-2">
-                  Teks Pertanyaan
+              {/* Question Text & Question Images based on imagePosition */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+                <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
+                  Teks Pertanyaan & Lampiran Gambar
                 </p>
-                <div
-                  className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
-                  dangerouslySetInnerHTML={{ __html: formatQuestionText(previewQuestion.question) }}
-                />
+                {(() => {
+                  const imgPos = previewQuestion.imagePosition || 'top';
+                  const qImages = previewQuestion.images && Array.isArray(previewQuestion.images) && previewQuestion.images.length > 0
+                    ? previewQuestion.images.filter((img) => typeof img === 'string' && img.trim() !== '')
+                    : (previewQuestion.image?.trim() ? [previewQuestion.image.trim()] : []);
+
+                  const renderImageBlock = () => (
+                    <div className={`my-3 grid gap-3 ${qImages.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                      {qImages.map((src, i) => (
+                        <div key={i} className="bg-white p-3 rounded-xl border border-slate-200 flex justify-center shadow-2xs">
+                          <img
+                            src={src}
+                            alt={`Lampiran Soal #${i + 1} (${imgPos})`}
+                            className="max-h-72 w-auto object-contain rounded-lg border border-slate-100"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  );
+
+                  const formattedText = formatQuestionText(previewQuestion.question);
+
+                  if (qImages.length === 0) {
+                    return (
+                      <div
+                        className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                        dangerouslySetInnerHTML={{ __html: formattedText }}
+                      />
+                    );
+                  }
+
+                  if (imgPos === 'top') {
+                    return (
+                      <div className="space-y-3">
+                        {renderImageBlock()}
+                        <div
+                          className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                          dangerouslySetInnerHTML={{ __html: formattedText }}
+                        />
+                      </div>
+                    );
+                  }
+
+                  if (imgPos === 'middle') {
+                    const parts = formattedText.split(/(<\/p>|<br\s*\/?>|\n\n)/i).filter(Boolean);
+                    if (parts.length > 2) {
+                      const midIndex = Math.floor(parts.length / 2);
+                      const firstHalf = parts.slice(0, midIndex).join('');
+                      const secondHalf = parts.slice(midIndex).join('');
+                      return (
+                        <div className="space-y-3">
+                          <div
+                            className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                            dangerouslySetInnerHTML={{ __html: firstHalf }}
+                          />
+                          {renderImageBlock()}
+                          <div
+                            className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                            dangerouslySetInnerHTML={{ __html: secondHalf }}
+                          />
+                        </div>
+                      );
+                    }
+                  }
+
+                  // bottom
+                  return (
+                    <div className="space-y-3">
+                      <div
+                        className="text-base text-slate-900 font-semibold leading-relaxed overflow-x-auto"
+                        dangerouslySetInnerHTML={{ __html: formattedText }}
+                      />
+                      {renderImageBlock()}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Options list / Category Table */}
@@ -8886,26 +8939,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   previewQuestion.options.map((opt) => (
                     <div
                       key={opt.id}
-                      className={`p-3.5 rounded-2xl border flex items-start gap-3 transition-all ${
+                      className={`p-3.5 rounded-2xl border flex flex-col gap-2 transition-all ${
                         opt.isCorrect
                           ? 'bg-emerald-50 border-emerald-300 text-emerald-950 font-bold shadow-xs'
                           : 'bg-white border-slate-200 text-slate-800'
                       }`}
                     >
-                      <span
-                        className={`w-7 h-7 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 ${
-                          opt.isCorrect
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-slate-100 text-slate-700 border border-slate-200'
-                        }`}
-                      >
-                        {opt.id}
-                      </span>
-                      <div className="flex-1 pt-1 text-sm">{opt.text}</div>
-                      {opt.isCorrect && (
-                        <span className="bg-emerald-200 text-emerald-900 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3 text-emerald-700" /> KUNCI JAWABAN
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`w-7 h-7 rounded-xl flex items-center justify-center font-extrabold text-xs shrink-0 ${
+                            opt.isCorrect
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-slate-100 text-slate-700 border border-slate-200'
+                          }`}
+                        >
+                          {opt.id}
                         </span>
+                        <div className="flex-1 pt-1 text-sm">{opt.text}</div>
+                        {opt.isCorrect && (
+                          <span className="bg-emerald-200 text-emerald-900 text-[10px] font-extrabold px-2.5 py-1 rounded-lg shrink-0 flex items-center gap-1">
+                            <CheckCircle className="w-3 h-3 text-emerald-700" /> KUNCI JAWABAN
+                          </span>
+                        )}
+                      </div>
+                      {opt.image && (
+                        <div className="ml-10">
+                          <img
+                            src={opt.image}
+                            alt={`Opsi ${opt.id}`}
+                            className="max-h-48 w-auto object-contain rounded-xl border border-slate-200 bg-white p-1"
+                          />
+                        </div>
                       )}
                     </div>
                   ))
@@ -8913,14 +8977,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               {/* Explanation / Pembahasan */}
-              {previewQuestion.explanation && (
-                <div className="bg-amber-50/80 border border-amber-200 p-4 rounded-2xl space-y-1">
+              {(previewQuestion.explanation || (previewQuestion.explanationImages && previewQuestion.explanationImages.length > 0) || previewQuestion.explanationImage) && (
+                <div className="bg-amber-50/80 border border-amber-200 p-4 rounded-2xl space-y-2">
                   <p className="text-xs font-extrabold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-amber-600" /> Pembahasan Soal
                   </p>
                   <p className="text-xs text-amber-950 leading-relaxed font-medium">
-                    {previewQuestion.explanation}
+                    {previewQuestion.explanation || 'Tidak ada teks pembahasan.'}
                   </p>
+                  {(() => {
+                    const expImgs: string[] = Array.isArray(previewQuestion.explanationImages) && previewQuestion.explanationImages.length > 0
+                      ? previewQuestion.explanationImages.filter((img) => typeof img === 'string' && img.trim() !== '')
+                      : (previewQuestion.explanationImage && previewQuestion.explanationImage.trim() ? [previewQuestion.explanationImage.trim()] : []);
+                    
+                    if (expImgs.length === 0) return null;
+
+                    return (
+                      <div className="pt-2 border-t border-amber-200/80 space-y-1.5">
+                        <p className="text-[11px] font-bold text-amber-800">Lampiran Gambar Pembahasan:</p>
+                        <div className={`grid gap-2 ${expImgs.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                          {expImgs.map((img, idx) => (
+                            <div key={idx} className="bg-white p-2 rounded-xl border border-amber-200 flex justify-center">
+                              <img src={img} alt={`Gambar Pembahasan #${idx + 1}`} className="max-h-56 w-auto object-contain rounded-lg" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
@@ -10144,11 +10228,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             saveAllStudentsToFirebase(data.students);
           }
           if (data.teachers && data.teachers.length > 0) {
-            setTeachersList(data.teachers);
             saveAllTeachersToFirebase(data.teachers);
           }
           if (data.admins && data.admins.length > 0) {
-            setAdminsList(data.admins);
             saveAllAdminsToFirebase(data.admins);
           }
           onSaveConfig({
