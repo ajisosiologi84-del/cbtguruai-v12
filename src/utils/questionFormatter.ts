@@ -65,6 +65,224 @@ export function formatQuestionText(text: string | null | undefined): string {
 
 import { Question } from '../types';
 
+export interface QuestionEvalResult {
+  earnedPoints: number;
+  maxPoints: number;
+  correctRatio: number; // 0.0 to 1.0
+  isFullyCorrect: boolean;
+  correctCountInQuestion: number;
+  totalStatements: number;
+}
+
+export interface ResolvedStatement {
+  id: string;
+  statement: string;
+  correctCategory: string;
+}
+
+/**
+ * Normalizes category string to handle variations like 'Sesuai'/'Benar'/'Tepat'/'Ya' vs 'Tidak Sesuai'/'Salah'/'Tidak Tepat'/'Tidak'
+ */
+export function normalizeCategoryValue(val: string | null | undefined): string {
+  if (!val) return '';
+  const clean = String(val).trim().toLowerCase();
+  if (['sesuai', 'tepat', 'benar', 'ya', 'fakta', 'true', 's', '1', 'b'].includes(clean)) return 'POS';
+  if (['tidak sesuai', 'tidak tepat', 'salah', 'tidak', 'miskonsepsi', 'false', 'ts', '0'].includes(clean)) return 'NEG';
+  return clean;
+}
+
+export function areCategoriesMatching(userChoice: string | null | undefined, correctCat: string | null | undefined): boolean {
+  if (!userChoice || !correctCat) return false;
+  const u = String(userChoice).trim().toLowerCase();
+  const c = String(correctCat).trim().toLowerCase();
+  if (u === c) return true;
+  const normU = normalizeCategoryValue(u);
+  const normC = normalizeCategoryValue(c);
+  return normU !== '' && normU === normC;
+}
+
+/**
+ * Safely resolves category statements for a question, even if categoryStatements
+ * is missing/empty on snapshot by falling back to options or categoryOptions.
+ */
+export function resolveCategoryStatements(q: Question): ResolvedStatement[] {
+  if (!q) return [];
+
+  // 1. Direct categoryStatements array
+  if (q.categoryStatements && Array.isArray(q.categoryStatements) && q.categoryStatements.length > 0) {
+    return q.categoryStatements.map((st, idx) => {
+      const stId = st.id || String(idx + 1);
+      const statementText = st.statement || (st as any).text || (st as any).pernyataan || `Pernyataan ${idx + 1}`;
+      const correctCat = st.correctCategory || (st as any).category || (st as any).correct || (st as any).kunci || (st as any).correctAnswer || (st as any).answer || 'Sesuai';
+      return {
+        id: String(stId),
+        statement: String(statementText),
+        correctCategory: String(correctCat),
+      };
+    });
+  }
+
+  // 2. Fallback to options if categoryStatements is missing but options exist
+  if (q.options && Array.isArray(q.options) && q.options.length > 0) {
+    const validOpts = q.options.filter((o) => o.text && o.text.trim() !== '' && o.text.trim() !== '-');
+    if (validOpts.length > 0) {
+      const primaryCat = q.categoryOptions?.[0] || 'Sesuai';
+      const secondaryCat = q.categoryOptions?.[1] || 'Tidak Sesuai';
+
+      return validOpts.map((o, idx) => {
+        const correctCat = (o as any).correctCategory || (o.isCorrect ? primaryCat : secondaryCat);
+        return {
+          id: String(idx + 1),
+          statement: String(o.text),
+          correctCategory: String(correctCat),
+        };
+      });
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Calculates earned points and detailed correctness for any question type:
+ * - Pilihan Ganda (Single Choice)
+ * - Pilihan Ganda Kompleks MCMA (Multiple Choice Multiple Answer)
+ * - Pilihan Ganda Kompleks Kategori (Benar/Salah or Ya/Tidak with partial credit per statement)
+ */
+export function getQuestionScoreAndCorrectness(q: Question, userAns: string | null): QuestionEvalResult {
+  const qPoin = typeof q.poin === 'number' && q.poin > 0 ? q.poin : 10;
+  const bentuk = (q.bentukSoal || 'Pilihan Ganda').toLowerCase();
+
+  const isKategori =
+    bentuk.includes('kategori') ||
+    bentuk.includes('benar') ||
+    (q.categoryStatements && q.categoryStatements.length > 0);
+
+  // 1. Pilihan Ganda Kompleks Kategori (Benar/Salah / Ya/Tidak)
+  if (isKategori) {
+    const statements = resolveCategoryStatements(q);
+
+    let userMap: Record<string, string> = {};
+    if (userAns && typeof userAns === 'string' && userAns.trim()) {
+      const trimmedAns = userAns.trim();
+      try {
+        userMap = JSON.parse(trimmedAns);
+      } catch {
+        trimmedAns.split('|').forEach((part) => {
+          const [id, val] = part.split(':');
+          if (id && val) userMap[id.trim()] = val.trim();
+        });
+      }
+    }
+
+    const userKeys = Object.keys(userMap);
+
+    if (statements.length === 0) {
+      if (userKeys.length === 0) {
+        return {
+          earnedPoints: 0,
+          maxPoints: qPoin,
+          correctRatio: 0,
+          isFullyCorrect: false,
+          correctCountInQuestion: 0,
+          totalStatements: 0,
+        };
+      }
+      // If question object lacks statements but student answered JSON map, treat active user keys
+      let correctCountInQuestion = 0;
+      userKeys.forEach((key) => {
+        if (userMap[key]) correctCountInQuestion++;
+      });
+      const totalStatements = userKeys.length;
+      const correctRatio = totalStatements > 0 ? correctCountInQuestion / totalStatements : 0;
+      return {
+        earnedPoints: qPoin * correctRatio,
+        maxPoints: qPoin,
+        correctRatio,
+        isFullyCorrect: correctCountInQuestion === totalStatements,
+        correctCountInQuestion,
+        totalStatements,
+      };
+    }
+
+    const totalStatements = statements.length;
+    let correctCountInQuestion = 0;
+
+    statements.forEach((st, idx) => {
+      const choice = userMap[st.id] || userMap[String(idx + 1)] || userMap[st.statement];
+      if (choice && areCategoriesMatching(choice, st.correctCategory)) {
+        correctCountInQuestion++;
+      }
+    });
+
+    const correctRatio = totalStatements > 0 ? correctCountInQuestion / totalStatements : 0;
+    const earnedPoints = qPoin * correctRatio;
+    const isFullyCorrect = totalStatements > 0 && correctCountInQuestion === totalStatements;
+
+    return {
+      earnedPoints,
+      maxPoints: qPoin,
+      correctRatio,
+      isFullyCorrect,
+      correctCountInQuestion,
+      totalStatements,
+    };
+  }
+
+  // 2. Pilihan Ganda Kompleks MCMA (Multiple Choice Multiple Answer)
+  if (bentuk.includes('mcma') || (bentuk.includes('kompleks') && !bentuk.includes('kategori'))) {
+    const correctOptions = (q.options || [])
+      .filter((o) => o.isCorrect)
+      .map((o) => o.id.trim().toUpperCase())
+      .sort();
+
+    if (correctOptions.length === 0) {
+      return {
+        earnedPoints: 0,
+        maxPoints: qPoin,
+        correctRatio: 0,
+        isFullyCorrect: false,
+        correctCountInQuestion: 0,
+        totalStatements: 0,
+      };
+    }
+
+    let userSelected: string[] = [];
+    if (userAns && typeof userAns === 'string' && userAns.trim()) {
+      userSelected = userAns
+        .trim()
+        .split(',')
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean)
+        .sort();
+    }
+
+    const isMatch =
+      userSelected.length === correctOptions.length &&
+      userSelected.every((val, idx) => val === correctOptions[idx]);
+
+    return {
+      earnedPoints: isMatch ? qPoin : 0,
+      maxPoints: qPoin,
+      correctRatio: isMatch ? 1 : 0,
+      isFullyCorrect: isMatch,
+      correctCountInQuestion: isMatch ? 1 : 0,
+      totalStatements: 1,
+    };
+  }
+
+  // 3. Standard Pilihan Ganda (Single Choice)
+  const isCorrect = isQuestionAnswerCorrect(q, userAns);
+  return {
+    earnedPoints: isCorrect ? qPoin : 0,
+    maxPoints: qPoin,
+    correctRatio: isCorrect ? 1 : 0,
+    isFullyCorrect: isCorrect,
+    correctCountInQuestion: isCorrect ? 1 : 0,
+    totalStatements: 1,
+  };
+}
+
 /**
  * Evaluates whether a student's answer is correct for any question type:
  * - Pilihan Ganda (Single Choice)
@@ -80,22 +298,22 @@ export function isQuestionAnswerCorrect(q: Question, userAns: string | null): bo
 
   // 1. Pilihan Ganda Kompleks Kategori (Benar/Salah / Ya/Tidak)
   if (bentuk.includes('kategori') || bentuk.includes('benar') || (q.categoryStatements && q.categoryStatements.length > 0)) {
-    if (!q.categoryStatements || q.categoryStatements.length === 0) return false;
+    const statements = resolveCategoryStatements(q);
+    if (statements.length === 0) return false;
 
     let userMap: Record<string, string> = {};
     try {
       userMap = JSON.parse(trimmedAns);
     } catch {
-      // Fallback delimited format: "1:Benar|2:Salah"
       trimmedAns.split('|').forEach((part) => {
         const [id, val] = part.split(':');
         if (id && val) userMap[id.trim()] = val.trim();
       });
     }
 
-    return q.categoryStatements.every((st) => {
-      const choice = userMap[st.id] || userMap[st.statement];
-      return choice && choice.trim().toLowerCase() === st.correctCategory.trim().toLowerCase();
+    return statements.every((st, idx) => {
+      const choice = userMap[st.id] || userMap[String(idx + 1)] || userMap[st.statement];
+      return choice && areCategoriesMatching(choice, st.correctCategory);
     });
   }
 
@@ -131,8 +349,9 @@ export function getCorrectAnswerDisplay(q: Question): string {
   const bentuk = (q.bentukSoal || 'Pilihan Ganda').toLowerCase();
 
   if (bentuk.includes('kategori') || (q.categoryStatements && q.categoryStatements.length > 0)) {
-    if (!q.categoryStatements || q.categoryStatements.length === 0) return '-';
-    return q.categoryStatements
+    const statements = resolveCategoryStatements(q);
+    if (statements.length === 0) return '-';
+    return statements
       .map((st, idx) => `${idx + 1}. ${st.correctCategory}`)
       .join(' | ');
   }
@@ -166,10 +385,17 @@ export function getStudentAnswerDisplay(q: Question, userAns: string | null): st
       });
     }
 
-    if (!q.categoryStatements) return trimmedAns;
-    return q.categoryStatements
+    const statements = resolveCategoryStatements(q);
+    if (statements.length === 0) {
+      // Fallback: format user JSON map neatly if no statements found on q
+      const entries = Object.entries(userMap);
+      if (entries.length === 0) return trimmedAns;
+      return entries.map(([k, v]) => `${k}. ${v}`).join(' | ');
+    }
+
+    return statements
       .map((st, idx) => {
-        const choice = userMap[st.id] || userMap[st.statement] || '-';
+        const choice = userMap[st.id] || userMap[String(idx + 1)] || userMap[st.statement] || '-';
         return `${idx + 1}. ${choice}`;
       })
       .join(' | ');

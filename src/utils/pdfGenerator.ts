@@ -1,6 +1,11 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { StudentResult, KopSekolahConfig, Question } from '../types';
+import {
+  getQuestionScoreAndCorrectness,
+  getStudentAnswerDisplay,
+  getCorrectAnswerDisplay,
+} from './questionFormatter';
 
 export const defaultKopSekolah: KopSekolahConfig = {
   namaSekolah: 'SMA NEGERI 1 JAKARTA',
@@ -440,7 +445,18 @@ export function generateIndividualStudentPdf(
   // Determine source questions array
   let sourceQuestions: Question[] = [];
   if (result.questionSnapshots && Array.isArray(result.questionSnapshots) && result.questionSnapshots.length > 0) {
-    sourceQuestions = result.questionSnapshots;
+    sourceQuestions = result.questionSnapshots.map((snapQ) => {
+      const masterQ = Array.isArray(questions) ? questions.find((mq) => mq.id === snapQ.id || mq.question === snapQ.question) : undefined;
+      if (masterQ) {
+        return {
+          ...snapQ,
+          categoryStatements: snapQ.categoryStatements && snapQ.categoryStatements.length > 0 ? snapQ.categoryStatements : masterQ.categoryStatements,
+          categoryOptions: snapQ.categoryOptions && snapQ.categoryOptions.length > 0 ? snapQ.categoryOptions : masterQ.categoryOptions,
+          options: snapQ.options && snapQ.options.length > 0 ? snapQ.options : masterQ.options,
+        };
+      }
+      return snapQ;
+    });
   } else if (Array.isArray(questions) && questions.length > 0) {
     const active = questions.filter((q) => q.isActive !== false);
     sourceQuestions = active.length > 0 ? active : questions;
@@ -450,21 +466,14 @@ export function generateIndividualStudentPdf(
   const userAnswers = result.answers || [];
 
   const answeredItems: { question: Question; originalIndex: number; userAns: string }[] = [];
-  let computedCorrect = 0;
+  let computedCorrectRatioSum = 0;
 
   sourceQuestions.forEach((q, idx) => {
     const userAns = userAnswers[idx];
     const isAnswered = userAns !== null && userAns !== undefined && String(userAns).trim() !== '';
 
-    const correctOpt = q.options.find((o) => o.isCorrect);
-    const userOpt = isAnswered
-      ? q.options.find((o) => o.id === userAns || o.text === userAns)
-      : undefined;
-
-    const isCorrect = userOpt ? userOpt.isCorrect === true : false;
-    if (isCorrect) {
-      computedCorrect++;
-    }
+    const evalRes = getQuestionScoreAndCorrectness(q, isAnswered ? String(userAns) : null);
+    computedCorrectRatioSum += evalRes.correctRatio;
 
     if (isAnswered) {
       answeredItems.push({
@@ -474,6 +483,8 @@ export function generateIndividualStudentPdf(
       });
     }
   });
+
+  const computedCorrect = Math.round(computedCorrectRatioSum);
 
   const totalAnsweredCount = answeredItems.length;
   const computedIncorrect = Math.max(0, totalExamQuestions - computedCorrect);
@@ -538,15 +549,17 @@ export function generateIndividualStudentPdf(
     tableBody = answeredItems.map((item, rowIdx) => {
       const q = item.question;
       const userAns = item.userAns;
-      const correctOpt = q.options.find((o) => o.isCorrect);
-      const userOpt = q.options.find((o) => o.id === userAns || o.text === userAns);
+      const evalRes = getQuestionScoreAndCorrectness(q, userAns);
 
-      const isCorrect = userOpt ? userOpt.isCorrect === true : false;
+      const userAnsText = cleanText(getStudentAnswerDisplay(q, userAns));
+      const correctAnsText = cleanText(getCorrectAnswerDisplay(q));
 
-      const userOptText = userOpt ? cleanText(userOpt.text) : '';
-      const userAnsText = `${userAns}. ${userOptText}`;
-
-      const correctAnsText = correctOpt ? `${correctOpt.id}. ${cleanText(correctOpt.text)}` : '-';
+      let statusText = 'SALAH (0)';
+      if (evalRes.isFullyCorrect) {
+        statusText = `BENAR (${evalRes.earnedPoints % 1 === 0 ? evalRes.earnedPoints : evalRes.earnedPoints.toFixed(2)})`;
+      } else if (evalRes.correctCountInQuestion > 0 && evalRes.totalStatements > 0) {
+        statusText = `BENAR ${evalRes.correctCountInQuestion}/${evalRes.totalStatements} (${evalRes.earnedPoints.toFixed(2)})`;
+      }
 
       const rawQText = cleanText(q.question);
       const shortQ = rawQText.length > 120 ? rawQText.substring(0, 120) + '...' : rawQText;
@@ -556,7 +569,7 @@ export function generateIndividualStudentPdf(
         shortQ,
         userAnsText,
         correctAnsText,
-        isCorrect ? 'BENAR' : 'SALAH',
+        statusText,
       ];
     });
   }
@@ -582,13 +595,14 @@ export function generateIndividualStudentPdf(
       1: { halign: 'left' },
       2: { halign: 'left', cellWidth: 38 },
       3: { halign: 'left', cellWidth: 38 },
-      4: { halign: 'center', cellWidth: 20, fontStyle: 'bold' },
+      4: { halign: 'center', cellWidth: 26, fontStyle: 'bold' },
     },
     didParseCell: function (data) {
       if (data.section === 'body' && data.column.index === 4) {
-        if (data.cell.raw === 'BENAR') {
+        const rawStr = String(data.cell.raw || '');
+        if (rawStr.startsWith('BENAR')) {
           data.cell.styles.textColor = [16, 185, 129];
-        } else if (data.cell.raw === 'SALAH') {
+        } else if (rawStr.startsWith('SALAH')) {
           data.cell.styles.textColor = [239, 68, 68];
         } else {
           data.cell.styles.textColor = [156, 163, 175];

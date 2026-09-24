@@ -2,7 +2,7 @@ import { RealTimeProgressModal } from './RealTimeProgressModal';
 import React, { useState, useRef } from 'react';
 import { AppConfig, Question, StudentResult, StudentUser, TeacherUser, AdminUser, KopSekolahConfig, TeacherConfigOverride } from '../types';
 import { decryptResult, encryptAppBackup, decryptAppBackup } from '../utils/crypto';
-import { formatQuestionText } from '../utils/questionFormatter';
+import { formatQuestionText, getQuestionScoreAndCorrectness, getStudentAnswerDisplay, getCorrectAnswerDisplay } from '../utils/questionFormatter';
 import { generateResultsPdfReport, generateIndividualStudentPdf, generateItemAnalysisPdfReport, ItemAnalysisData, DistractorDetail, defaultKopSekolah, extractClassFromNoPeserta, extractKodeSoalFromStudentInfo, PaperSizeOption, PaperOrientationOption, PdfPaperSettings } from '../utils/pdfGenerator';
 import { DownloadAnimationModal } from './DownloadAnimationModal';
 import { ExportQuestionModal } from './ExportQuestionModal';
@@ -3175,6 +3175,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         return null;
       };
 
+      const isCategory = (q.bentukSoal || '').toLowerCase().includes('kategori') || (q.categoryStatements && q.categoryStatements.length > 0);
+
       sortedResults.forEach((r) => {
         const userAns = getUserAnswer(r);
 
@@ -3182,24 +3184,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           countEmpty++;
           totalIncorrect++;
         } else {
-          const cleanAns = String(userAns).trim().toUpperCase();
-          const matchedOpt = q.options.find(
-            (o) => o.id.toUpperCase() === cleanAns || o.text.trim().toUpperCase() === cleanAns
-          );
-          const ansId = matchedOpt ? matchedOpt.id.toUpperCase() : cleanAns;
-
-          if (ansId === 'A') countA++;
-          else if (ansId === 'B') countB++;
-          else if (ansId === 'C') countC++;
-          else if (ansId === 'D') countD++;
-          else if (ansId === 'E') countE++;
-          else countEmpty++;
-
-          const isCorr = matchedOpt ? matchedOpt.isCorrect === true : ansId === keyOption;
-          if (isCorr) {
-            totalCorrect++;
+          if (isCategory) {
+            const evalRes = getQuestionScoreAndCorrectness(q, String(userAns));
+            totalCorrect += evalRes.correctRatio;
+            totalIncorrect += (1 - evalRes.correctRatio);
           } else {
-            totalIncorrect++;
+            const cleanAns = String(userAns).trim().toUpperCase();
+            const matchedOpt = q.options.find(
+              (o) => o.id.toUpperCase() === cleanAns || o.text.trim().toUpperCase() === cleanAns
+            );
+            const ansId = matchedOpt ? matchedOpt.id.toUpperCase() : cleanAns;
+
+            if (ansId === 'A') countA++;
+            else if (ansId === 'B') countB++;
+            else if (ansId === 'C') countC++;
+            else if (ansId === 'D') countD++;
+            else if (ansId === 'E') countE++;
+            else countEmpty++;
+
+            const isCorr = matchedOpt ? matchedOpt.isCorrect === true : ansId === keyOption;
+            if (isCorr) {
+              totalCorrect++;
+            } else {
+              totalIncorrect++;
+            }
           }
         }
       });
@@ -3207,16 +3215,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       upperGroup.forEach((r) => {
         const userAns = getUserAnswer(r);
         if (userAns && String(userAns).trim() !== '') {
-          const cleanAns = String(userAns).trim().toUpperCase();
-          const matchedOpt = q.options.find(
-            (o) => o.id.toUpperCase() === cleanAns || o.text.trim().toUpperCase() === cleanAns
-          );
-          const ansId = matchedOpt ? matchedOpt.id.toUpperCase() : cleanAns;
-          if (['A', 'B', 'C', 'D', 'E'].includes(ansId)) {
-            upperOptionCounts[ansId] = (upperOptionCounts[ansId] || 0) + 1;
-          }
-          if (matchedOpt ? matchedOpt.isCorrect === true : ansId === keyOption) {
-            upperCorrect++;
+          if (isCategory) {
+            const evalRes = getQuestionScoreAndCorrectness(q, String(userAns));
+            upperCorrect += evalRes.correctRatio;
+          } else {
+            const cleanAns = String(userAns).trim().toUpperCase();
+            const matchedOpt = q.options.find(
+              (o) => o.id.toUpperCase() === cleanAns || o.text.trim().toUpperCase() === cleanAns
+            );
+            const ansId = matchedOpt ? matchedOpt.id.toUpperCase() : cleanAns;
+            if (['A', 'B', 'C', 'D', 'E'].includes(ansId)) {
+              upperOptionCounts[ansId] = (upperOptionCounts[ansId] || 0) + 1;
+            }
+            if (matchedOpt ? matchedOpt.isCorrect === true : ansId === keyOption) {
+              upperCorrect++;
+            }
           }
         }
       });
@@ -3224,16 +3237,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       lowerGroup.forEach((r) => {
         const userAns = getUserAnswer(r);
         if (userAns && String(userAns).trim() !== '') {
-          const cleanAns = String(userAns).trim().toUpperCase();
-          const matchedOpt = q.options.find(
-            (o) => o.id.toUpperCase() === cleanAns || o.text.trim().toUpperCase() === cleanAns
-          );
-          const ansId = matchedOpt ? matchedOpt.id.toUpperCase() : cleanAns;
-          if (['A', 'B', 'C', 'D', 'E'].includes(ansId)) {
-            lowerOptionCounts[ansId] = (lowerOptionCounts[ansId] || 0) + 1;
-          }
-          if (matchedOpt ? matchedOpt.isCorrect === true : cleanAns === keyOption) {
-            lowerCorrect++;
+          if (isCategory) {
+            const evalRes = getQuestionScoreAndCorrectness(q, String(userAns));
+            lowerCorrect += evalRes.correctRatio;
+          } else {
+            const cleanAns = String(userAns).trim().toUpperCase();
+            const matchedOpt = q.options.find(
+              (o) => o.id.toUpperCase() === cleanAns || o.text.trim().toUpperCase() === cleanAns
+            );
+            const ansId = matchedOpt ? matchedOpt.id.toUpperCase() : cleanAns;
+            if (['A', 'B', 'C', 'D', 'E'].includes(ansId)) {
+              lowerOptionCounts[ansId] = (lowerOptionCounts[ansId] || 0) + 1;
+            }
+            if (matchedOpt ? matchedOpt.isCorrect === true : cleanAns === keyOption) {
+              lowerCorrect++;
+            }
           }
         }
       });

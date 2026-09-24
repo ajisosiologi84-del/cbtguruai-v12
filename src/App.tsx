@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AppConfig, Question, Option, ViewState, StudentInfo, StudentResult, CheatingLog, BroadcastAlert, TeacherUser } from './types';
-import { isQuestionAnswerCorrect } from './utils/questionFormatter';
+import { isQuestionAnswerCorrect, getQuestionScoreAndCorrectness } from './utils/questionFormatter';
 import { defaultQuestions } from './data/defaultQuestions';
 import { defaultStudents } from './data/defaultStudents';
 import { encryptResult } from './utils/crypto';
@@ -97,6 +97,54 @@ const defaultScheduleTokens: ExamScheduleToken[] = [
 const STORAGE_KEY = 'cbt_sosiologi_config_v2';
 const RESULTS_KEY = 'cbt_sosiologi_student_results_v1';
 const ACTIVE_SESSION_KEY = 'cbt_active_student_exam_session_v2';
+
+// Helper to safely store student results to localStorage without exceeding 5MB quota
+function safeSaveResultsToLocalStorage(key: string, results: StudentResult[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(results));
+  } catch (firstErr) {
+    // Fallback 1: Strip heavy image Data URLs from questionSnapshots (~90% size reduction)
+    try {
+      const lightResults = results.map((r) => {
+        if (!r.questionSnapshots || !Array.isArray(r.questionSnapshots)) return r;
+        const cleanedSnapshots = r.questionSnapshots.map((q) => {
+          const { image, images, explanationImage, explanationImages, ...restQ } = q;
+          const cleanedOptions = q.options?.map((opt) => {
+            const { image: optImg, ...optRest } = opt;
+            return optRest;
+          });
+          return { ...restQ, options: cleanedOptions };
+        });
+        return { ...r, questionSnapshots: cleanedSnapshots };
+      });
+      localStorage.setItem(key, JSON.stringify(lightResults));
+    } catch (secondErr) {
+      // Fallback 2: Keep latest 50 results with light snapshots
+      try {
+        const recentResults = results.slice(0, 50).map((r) => {
+          if (!r.questionSnapshots || !Array.isArray(r.questionSnapshots)) return r;
+          const cleanedSnapshots = r.questionSnapshots.map((q) => {
+            const { image, images, explanationImage, explanationImages, ...restQ } = q;
+            return restQ;
+          });
+          return { ...r, questionSnapshots: cleanedSnapshots };
+        });
+        localStorage.setItem(key, JSON.stringify(recentResults));
+      } catch (thirdErr) {
+        // Fallback 3: Keep latest 30 result summaries without snapshots
+        try {
+          const minimalResults = results.slice(0, 30).map((r) => {
+            const { questionSnapshots, ...minimal } = r;
+            return minimal;
+          });
+          localStorage.setItem(key, JSON.stringify(minimalResults));
+        } catch (finalErr) {
+          console.warn('LocalStorage quota exceeded for student results. Full data remains saved in Firebase database.');
+        }
+      }
+    }
+  }
+}
 
 export default function App() {
   // App Configuration State
@@ -207,11 +255,7 @@ export default function App() {
       return { ...r, id: uniqueId };
     });
     setStudentResults(sanitizedResults);
-    try {
-      localStorage.setItem(RESULTS_KEY, JSON.stringify(sanitizedResults));
-    } catch (e) {
-      console.error('Failed to save student results:', e);
-    }
+    safeSaveResultsToLocalStorage(RESULTS_KEY, sanitizedResults);
   }, []);
 
   // View State & Admin Role
@@ -309,9 +353,7 @@ export default function App() {
     loadStudentResultsFromFirebase().then((remoteResults) => {
       if (Array.isArray(remoteResults) && remoteResults.length > 0) {
         setStudentResults(remoteResults);
-        try {
-          localStorage.setItem(RESULTS_KEY, JSON.stringify(remoteResults));
-        } catch (e) {}
+        safeSaveResultsToLocalStorage(RESULTS_KEY, remoteResults);
       }
     }).catch(() => {});
 
@@ -369,9 +411,7 @@ export default function App() {
     const unsubResults = subscribeStudentResultsFromFirebase((remoteResults) => {
       if (Array.isArray(remoteResults)) {
         setStudentResults(remoteResults);
-        try {
-          localStorage.setItem(RESULTS_KEY, JSON.stringify(remoteResults));
-        } catch (e) {}
+        safeSaveResultsToLocalStorage(RESULTS_KEY, remoteResults);
       }
     });
 
@@ -538,9 +578,19 @@ export default function App() {
         cheatingLogs,
         savedAt: new Date().toISOString(),
       };
-      localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(sessionData));
+      try {
+        localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(sessionData));
+      } catch (err) {
+        // Fallback for autosave: strip question image data URLs to fit quota
+        const lightQuestions = activeQuestions.map((q) => {
+          const { image, images, explanationImage, explanationImages, ...restQ } = q;
+          return restQ;
+        });
+        const lightSession = { ...sessionData, activeQuestions: lightQuestions };
+        localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(lightSession));
+      }
     } catch (e) {
-      console.error('Autosave exam session failed:', e);
+      console.warn('Autosave exam session failed:', e);
     }
   }, [viewState, activeQuestions, currentIndex, userAnswers, raguList, timeRemaining, warnings, cheatingLogs, studentInfo]);
 
@@ -999,19 +1049,19 @@ export default function App() {
       document.exitFullscreen().catch(() => {});
     }
 
-    let correct = 0;
     let totalEarnedPoints = 0;
     let totalMaxPoints = 0;
+    let correctRatioSum = 0;
 
     activeQuestions.forEach((q, idx) => {
       const qPoin = typeof q.poin === 'number' && q.poin > 0 ? q.poin : 10;
       totalMaxPoints += qPoin;
 
       const userAns = userAnswers[idx];
-      if (isQuestionAnswerCorrect(q, userAns)) {
-        correct++;
-        totalEarnedPoints += qPoin;
-      }
+      const evalRes = getQuestionScoreAndCorrectness(q, userAns);
+
+      totalEarnedPoints += evalRes.earnedPoints;
+      correctRatioSum += evalRes.correctRatio;
     });
 
     const total = activeQuestions.length;
@@ -1019,9 +1069,10 @@ export default function App() {
       totalMaxPoints > 0
         ? Math.min(100, Math.round((totalEarnedPoints / totalMaxPoints) * 100))
         : total > 0
-        ? Math.round((correct / total) * 100)
+        ? Math.round((correctRatioSum / total) * 100)
         : 0;
-    const incorrect = total - correct;
+    const correct = Math.round(correctRatioSum);
+    const incorrect = Math.max(0, total - correct);
     const isPassed = score >= config.kkm;
     const timeSpent = (config.duration * 60) - timeRemaining;
     const durationMins = Math.max(1, Math.round(timeSpent / 60));

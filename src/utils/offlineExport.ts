@@ -834,15 +834,62 @@ export function exportOfflineAppHtml(config: AppConfig): void {
     function finishExam() {
       isExamFinished = true;
       clearInterval(timerInterval);
-      let correct = 0;
+      let totalEarnedPoints = 0;
+      let totalMaxPoints = 0;
+      let correctRatioSum = 0;
+
       activeExamQuestions.forEach((q, idx) => {
-        const userOpt = userAnswers[idx];
-        const correctOpt = q.options.find(o => o.isCorrect);
-        if (userOpt && correctOpt && userOpt === correctOpt.id) correct++;
+        const qPoin = (typeof q.poin === 'number' && q.poin > 0) ? q.poin : 10;
+        totalMaxPoints += qPoin;
+
+        const userAns = userAnswers[idx];
+        const bentuk = (q.bentukSoal || 'Pilihan Ganda').toLowerCase();
+
+        if (bentuk.includes('kategori') || bentuk.includes('benar') || (q.categoryStatements && q.categoryStatements.length > 0)) {
+          if (q.categoryStatements && q.categoryStatements.length > 0) {
+            let userMap = {};
+            if (userAns && typeof userAns === 'string') {
+              try { userMap = JSON.parse(userAns); } catch(e) {
+                userAns.split('|').forEach(part => {
+                  const [id, val] = part.split(':');
+                  if (id && val) userMap[id.trim()] = val.trim();
+                });
+              }
+            }
+            let correctSt = 0;
+            q.categoryStatements.forEach(st => {
+              const choice = userMap[st.id] || userMap[st.statement];
+              if (choice && choice.trim().toLowerCase() === st.correctCategory.trim().toLowerCase()) {
+                correctSt++;
+              }
+            });
+            const ratio = correctSt / q.categoryStatements.length;
+            totalEarnedPoints += qPoin * ratio;
+            correctRatioSum += ratio;
+          }
+        } else if (bentuk.includes('mcma')) {
+          const correctOpts = (q.options || []).filter(o => o.isCorrect).map(o => o.id.trim().toUpperCase()).sort();
+          let userSel = [];
+          if (userAns && typeof userAns === 'string') {
+            userSel = userAns.split(',').map(s => s.trim().toUpperCase()).filter(Boolean).sort();
+          }
+          const isMatch = userSel.length === correctOpts.length && userSel.every((v, i) => v === correctOpts[i]);
+          if (isMatch) {
+            totalEarnedPoints += qPoin;
+            correctRatioSum += 1;
+          }
+        } else {
+          const correctOpt = (q.options || []).find(o => o.isCorrect);
+          if (userAns && correctOpt && userAns === correctOpt.id) {
+            totalEarnedPoints += qPoin;
+            correctRatioSum += 1;
+          }
+        }
       });
 
       const total = activeExamQuestions.length;
-      const score = Math.round((correct / total) * 100);
+      const score = totalMaxPoints > 0 ? Math.min(100, Math.round((totalEarnedPoints / totalMaxPoints) * 100)) : (total > 0 ? Math.round((correctRatioSum / total) * 100) : 0);
+      const correct = Math.round(correctRatioSum);
       const isPassed = score >= (CONFIG.kkm || 75);
 
       lastResultObj = {

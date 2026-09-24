@@ -1,7 +1,7 @@
 import React from 'react';
 import { Question } from '../types';
-import { formatQuestionText, isQuestionAnswerCorrect, getStudentAnswerDisplay, getCorrectAnswerDisplay } from '../utils/questionFormatter';
-import { CheckCircle2, XCircle, Microscope, LogOut, BookOpen, Layers } from 'lucide-react';
+import { formatQuestionText, isQuestionAnswerCorrect, getQuestionScoreAndCorrectness, getStudentAnswerDisplay, getCorrectAnswerDisplay } from '../utils/questionFormatter';
+import { CheckCircle2, XCircle, Microscope, LogOut, BookOpen, Layers, CheckSquare } from 'lucide-react';
 
 interface ReviewViewProps {
   questions: Question[];
@@ -35,7 +35,8 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ questions, answers, onEx
         <div className="max-w-4xl mx-auto space-y-6">
           {questions.map((q, index) => {
             const userAnsId = answers[index];
-            const isUserCorrect = isQuestionAnswerCorrect(q, userAnsId);
+            const evalRes = getQuestionScoreAndCorrectness(q, userAnsId);
+            const isUserCorrect = evalRes.isFullyCorrect;
             const userDisplay = getStudentAnswerDisplay(q, userAnsId);
             const correctDisplay = getCorrectAnswerDisplay(q);
             const bentukText = q.bentukSoal || 'Pilihan Ganda';
@@ -58,16 +59,22 @@ export const ReviewView: React.FC<ReviewViewProps> = ({ questions, answers, onEx
                     className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 ${
                       isUserCorrect
                         ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : evalRes.correctCountInQuestion > 0
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300'
                         : 'bg-red-100 text-red-800 border border-red-200'
                     }`}
                   >
                     {isUserCorrect ? (
                       <>
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Benar
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" /> Benar (Poin {evalRes.earnedPoints % 1 === 0 ? evalRes.earnedPoints : evalRes.earnedPoints.toFixed(2)})
+                      </>
+                    ) : evalRes.correctCountInQuestion > 0 ? (
+                      <>
+                        <CheckSquare className="w-4 h-4 text-amber-600" /> Benar {evalRes.correctCountInQuestion}/{evalRes.totalStatements} (Poin {evalRes.earnedPoints.toFixed(2)})
                       </>
                     ) : (
                       <>
-                        <XCircle className="w-4 h-4 text-red-600" /> Salah
+                        <XCircle className="w-4 h-4 text-red-600" /> Salah (Poin 0)
                       </>
                     )}
                   </span>
